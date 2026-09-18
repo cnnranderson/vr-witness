@@ -1,4 +1,5 @@
 """Exercise defensive reads without attaching to or modifying any process."""
+
 import json
 from pathlib import Path
 import struct
@@ -58,11 +59,12 @@ class ReadGuards(unittest.TestCase):
                 if address == 0xBAD00000:
                     raise AssertionError("Unsynchronized render target was dereferenced")
                 if address == 0x630B50:
-                    return struct.pack("<16f", *([float('inf')] * 16))
+                    return struct.pack("<16f", *([float("inf")] * 16))
                 return super().read(address, size)
+
         result = sample(Targets(), 0)
-        self.assertEqual(result['render_targets_by_rva']['0x469ab58'], '0xbad00000')
-        self.assertEqual(result['menu_matrix_components'], [None] * 16)
+        self.assertEqual(result["render_targets_by_rva"]["0x469ab58"], "0xbad00000")
+        self.assertEqual(result["menu_matrix_components"], [None] * 16)
         json.dumps(result, allow_nan=False)
 
 

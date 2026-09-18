@@ -1,5 +1,7 @@
 # Knuckles input work
 
+Historical investigation notes; see [current state](current-state.md) for the latest working build and validation.
+
 ## Established baseline
 
 The persistent cursor/pause build is promoted and enabled in the current game session. Its combined persistent behavior passed all three integration tests; the user accepted the earlier positive pause headset test and deferred extended pause validation.
@@ -75,7 +77,7 @@ Test left-stick forward/back/strafe, return to neutral, then briefly pause and r
 
 ### First headset movement result
 
-After restarting into PID 29956 and restoring the cursor/pause session, a 30-second `-Move -LegacyAxis0` test logged 2,675 polls, 2,678 movement calls and 500 applied movement vectors. Both hands remained valid; all 1,447 sampled states were mode 2 with zero pause fade. The user responded, “Yes! it moved properly, completely” to the direction/release/pause question. This confirms the left-stick walking result; the log did not observe a pause interval, so pause-specific blocking/resume validation remains pending rather than inferred from that broad response. A focused pause check was requested before persistent input.
+After restarting into PID 29956 and restoring the cursor/pause session, a 30-second `-Move -LegacyAxis0` test logged 2,675 polls, 2,678 movement calls and 500 applied movement vectors. Both hands remained valid; all 1,447 sampled states were mode 2 with zero pause fade. The user responded, "Yes! it moved properly, completely" to the direction/release/pause question. This confirms the left-stick walking result; the log did not observe a pause interval, so pause-specific blocking/resume validation remains pending rather than inferred from that broad response. A focused pause check was requested before persistent input.
 
 The input hooks disabled cleanly at the deadline, and the cursor/pause session remained enabled without faults or fallbacks (36,054 deferred/submitted). This controller feature is still bounded; walking is off between tests. Right-stick turning is not implemented.
 
@@ -122,7 +124,7 @@ Use `scripts/controller-test.ps1 -AimTrace -Seconds 3 -BuildName pointing-experi
 
 The 30-second actual-game pointing test produced 2,131 applied cursor updates from 2,437 cursor calls, with 2,458 valid pose samples and clean teardown. The user confirmed that pointing and trigger drawing both worked, then reported excessive sensitivity and requested speed/smoothing controls and right A for recentering. Walking was restored; the render session stayed active.
 
-The separate `pointing-session` revision adds opt-in persistent `-Aim`, `-AimSpeed` (10–300 percent of view width/second, default 80), and `-AimSmoothingMs` (0–250 ms, default 80). It replaces the per-frame cap with elapsed-time speed limiting and an exponential response. Zero smoothing leaves the speed cap active. Settings are chosen at session start; stopping and restarting the same loaded session can change them without restarting the game. Input-session protocol version 2 and its size guard reject mismatched loaders/DLLs; render and timed-probe protocols remain unchanged.
+The separate `pointing-session` revision adds opt-in persistent `-Aim`, `-AimSpeed` (10-300 percent of view width/second, default 80), and `-AimSmoothingMs` (0-250 ms, default 80). It replaces the per-frame cap with elapsed-time speed limiting and an exponential response. Zero smoothing leaves the speed cap active. Settings are chosen at session start; stopping and restarting the same loaded session can change them without restarting the game. Input-session protocol version 2 and its size guard reject mismatched loaders/DLLs; render and timed-probe protocols remain unchanged.
 
 The recenter reference is a fixed tracking-space rotation mapping the current right-hand direction to the current HMD forward direction. Subsequent head movement still changes the projection normally. It never writes camera or headset transforms. The intended button is historical OpenVR A (bit 7), pending physical-button capture. Only a fresh press in mode 0 with the trigger released is accepted; drawing mode 1 and held-on-entry presses cannot recenter. Calibration survives ordinary puzzle/menu transitions but is reset by a device change, session restart, or F7 toggle. Poll-time invalidation disarms button and drawing latches even if the native cursor routine is skipped outside puzzle mode.
 

@@ -53,7 +53,7 @@ struct InputSessionRequest {
     std::uint32_t pointing;
     std::uint32_t aim_speed_percent;
     std::uint32_t aim_smoothing_ms;
-    std::uint32_t snap_steps; // 0 disables turning; 1/2/4 mean 22.5/45/90 degrees.
+    std::uint32_t snap_steps;          // 0 disables turning; 1/2/4 mean 22.5/45/90 degrees.
     std::uint32_t stick_speed_percent; // Status output; must be zero in a request.
     std::uint64_t polls;
     std::uint64_t movement_calls;

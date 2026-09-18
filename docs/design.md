@@ -33,12 +33,12 @@ Initial target: Windows PC rendering and SteamVR streaming to Frame. Standalone 
 
 | Stage | Deliverable | Exit condition |
 | --- | --- | --- |
-| 0 — diagnostics | x64 loader, bounded observation DLL, binary inventory | Build and owned-process injection test pass; then verify an attach in the actual game |
-| 1 — trace legacy VR | Trace initialization/interface requests and identify render/camera sites | Logs distinguish code actually executed from imports merely present; bind findings to exact executable hash |
-| 2 — desktop camera experiment | Controlled translation and rotation offsets with a restore control | Repeatable offset without destabilizing simulation, save/load, or puzzle state; no headset required |
-| 3 — stereo/head tracking | Correct per-eye views, head pose, recenter, gamepad movement | Hardware confirms parallax, scale, low-latency movement, and stable frame pacing |
-| 4 — playable puzzles | Correct cursor/ray and mode switching | Panels and perspective puzzles usable; fixed/mono fallback notification and manual toggle tested |
-| 5 — polish | Motion controllers, comfort settings, reproducible installation | Regression coverage across menus, loading, play sessions, and target hardware |
+| 0  -  diagnostics | x64 loader, bounded observation DLL, binary inventory | Build and owned-process injection test pass; then verify an attach in the actual game |
+| 1  -  trace legacy VR | Trace initialization/interface requests and identify render/camera sites | Logs distinguish code actually executed from imports merely present; bind findings to exact executable hash |
+| 2  -  desktop camera experiment | Controlled translation and rotation offsets with a restore control | Repeatable offset without destabilizing simulation, save/load, or puzzle state; no headset required |
+| 3  -  stereo/head tracking | Correct per-eye views, head pose, recenter, gamepad movement | Hardware confirms parallax, scale, low-latency movement, and stable frame pacing |
+| 4  -  playable puzzles | Correct cursor/ray and mode switching | Panels and perspective puzzles usable; fixed/mono fallback notification and manual toggle tested |
+| 5  -  polish | Motion controllers, comfort settings, reproducible installation | Regression coverage across menus, loading, play sessions, and target hardware |
 
 Stage 0 has passed both owned-process testing and an actual-game attach/unload. The native `-vr` experiment subsequently reached active OpenVR system/compositor interfaces and stereo texture submission; the user confirmed head rotation and leaning in the headset. Keyboard/mouse walking and puzzle drawing also work. This changes the practical sequence: repair the missing headset cursor first, then controller input and puzzle fallback modes. A separate camera override or replacement stereo renderer is not currently required to obtain basic 6DOF.
 

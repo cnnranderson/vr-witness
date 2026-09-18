@@ -11,4 +11,4 @@ struct RenderSnapshot {
     float menu_fade{};
     std::array<float, 16> menu_matrix{};
 };
-}
+} // namespace witness

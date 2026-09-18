@@ -1,9 +1,11 @@
 """Test bounded reads and misleading controller data without game access."""
+
 import json
 from pathlib import Path
 import struct
 import sys
 import unittest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from controller_trace import sample
 

@@ -1,5 +1,7 @@
 # Testing plan
 
+Historical investigation notes; see [current state](current-state.md) for the latest working build and validation.
+
 ## Desktop stage (available now)
 
 No VR headset, controller, or game modifications are required for the diagnostic test. Automated injection coverage uses a hidden process owned by this project. The first manual game attach has also succeeded, as recorded below.

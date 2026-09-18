@@ -1,5 +1,7 @@
 # Initial binary findings
 
+Historical investigation notes; see [current state](current-state.md) for the latest working build and validation.
+
 Inspection date: 2026-09-18 UTC. These findings are specific to the local Steam build, not a cross-version patch specification.
 
 | Item | Value |

@@ -44,3 +44,19 @@ After process tests and a passive native-route check, coordinate one session cov
 Keep verified native addresses/ABI guards and lifetime tests. They prevented bad assumptions and isolate faults. Avoid a broad hook-framework rewrite during feature work. Keep history in existing experiment documents but read it only by topic; current-state.md is the short handoff. Generated builds/logs stay ignored under out; retaining the last working binary is useful rollback, not production code.
 
 Compaction is tied to context size; Codex documents a token threshold with model defaults. Smaller output and a compact project handoff reduce repeated work, but cannot guarantee zero compactions. No Codex settings were changed. Reference: https://learn.chatgpt.com/docs/config-file/config-reference
+
+## Style and formatting
+
+Use four-space indentation, descriptive names, and one statement per line. Keep comments to the reason, units, ownership or invariants that are not clear from the code. Document public helpers and scripts with their inputs, outputs and failure/lifetime behavior; do not narrate each statement. Use ASCII punctuation in project-owned files and preserve third-party sources/licenses.
+
+C++ uses `.clang-format`; Python uses Black with `pyproject.toml`. The optional formatter versions are pinned in `config/formatters.txt`:
+
+```powershell
+python -m pip install --target .tools/formatters -r config/formatters.txt
+.\scripts\format.ps1
+.\scripts\format.ps1 -Check
+```
+
+Formatting touches only `src`, C++ fixtures and Python tools/tests. It skips vendored code, generated output and the game installation. The command restores its temporary Python path afterward. PowerShell commands expose comment-based help; use `Get-Help .\scripts\start-vr.ps1 -Detailed` as an example.
+
+See [the code guide](code-guide.md) for shared protocol and input contracts. Preserve live-byte guards, calling conventions and callback lifetime rules when refactoring.

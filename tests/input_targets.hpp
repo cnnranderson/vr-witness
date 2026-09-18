@@ -13,7 +13,7 @@ extern "C" void TestInputSetLegacy(bool);
 void TestInputOverride(int);
 unsigned TestInputPhase();
 
-extern "C" witness::input::Axis* TestInputCursor(witness::input::Axis*,bool);
+extern "C" witness::input::Axis* TestInputCursor(witness::input::Axis*, bool);
 void TestInputRecenter(bool value);
 void TestInputAimScenario(bool);
 
@@ -23,9 +23,9 @@ extern "C" float TestInputYaw, TestInputVrYaw;
 extern float fixture_seen_yaw, fixture_seen_vr_yaw;
 extern unsigned native_vr_updates;
 
-extern "C" void TestInputKey(void*,int,bool);
+extern "C" void TestInputKey(void*, int, bool);
 extern bool fixture_pad_pressed, fixture_trigger_pressed, fixture_menu_pressed;
 void TestInputStickScenario(bool);
 
 void TestInputBack(bool);
-extern unsigned native_back_events,native_back_leaks;
+extern unsigned native_back_events, native_back_leaks;
