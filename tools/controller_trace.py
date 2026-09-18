@@ -16,13 +16,13 @@ from inspect_game import PE
 from runtime_state import ProcessReader, snapshot
 from playability_trace import floats
 
-# Controller allocation/decoding, renderer suppression, native button storage.
-# None of these instruction windows intersects a cursor/pause detour.
+# Verify controller/input references outside the cursor and pause detours.
 SITES = ((0x37AA00, 0x28D), (0x37A5F2, 0xE5), (0x0696B0, 0x12), (0x364210, 0xA8))
 KEYS = {0x135: "legacy_trigger", 0x136: "legacy_pad_click", 0x13D: "legacy_application_menu"}
 
 
 def sample(reader, base):
+    """Read one unsynchronized sample from a verified image; reject observed pointer turnover."""
     checks = []
 
     def stable(address, size):

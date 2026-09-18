@@ -1,3 +1,9 @@
+<#
+.SYNOPSIS
+Run a bounded render trace or one optional render experiment.
+.DESCRIPTION
+Stop the persistent render session before tracing; choose at most one behavior flag.
+#>
 [CmdletBinding()]
 param(
     [string]$GameDir = 'D:\SteamLibrary\steamapps\common\The Witness',

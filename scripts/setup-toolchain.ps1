@@ -1,3 +1,9 @@
+<#
+.SYNOPSIS
+Install the pinned, checksum-verified compiler inside .tools.
+.DESCRIPTION
+No persistent PATH changes are made.
+#>
 [CmdletBinding()]
 param()
 $ErrorActionPreference = 'Stop'

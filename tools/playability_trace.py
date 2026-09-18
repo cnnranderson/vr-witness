@@ -18,8 +18,7 @@ from inspect_game import PE
 from runtime_state import ProcessReader, snapshot
 
 
-# RIP-relative code only, checked against the already hash-verified image.
-# Covers the pointer loads, controller decoding, and cursor rendering fields.
+# Verify pointer, input and cursor references against the hash-checked image.
 SITES = ((0x37AA00, 0x28D), (0x37A5F2, 0x67), (0x1C934A, 0x17),
          (0x1CCAF0, 0x12C), (0x1CDA90, 0x29), (0x1CEE99, 0x28),
          (0x1CF7DE, 0x87), (0x1CF3B3, 0x190), (0x1FE730, 0x1F),
@@ -35,6 +34,7 @@ def floats(raw: bytes, offset: int, count: int) -> list:
 
 
 def sample(reader: ProcessReader, base: int) -> dict:
+    """Read cached state from a verified image; reject invalid bounds or observed pointer turnover."""
     pointer_rvas = (0x469A5B0, 0x62D4D0, 0x469A570)
     pointers = [reader.read(base + rva, 8) for rva in pointer_rvas]
     renderer, cursor, controllers = [struct.unpack("<Q", value)[0] for value in pointers]
@@ -51,8 +51,7 @@ def sample(reader: ProcessReader, base: int) -> dict:
             orientation_components=floats(reader.read(base + 0x62D584, 16), 0, 4),
             reference_vector=floats(reader.read(base + 0x61E800, 12), 0, 3),
             subtracted_scalar=floats(reader.read(base + 0x62D1F4, 4), 0, 1)[0]),
-        # Addresses only: do not dereference changing render targets externally.
-        # This is not synchronized to an eye or draw call.
+        # Resource addresses are identifiers, not synchronized eye/draw snapshots.
         render_targets_by_rva={hex(rva): hex(struct.unpack("<Q", reader.read(base + rva, 8))[0])
                                for rva in (0x469A5D0, 0x469A5D8, 0x469AB58, 0x469AB70,
                                            0x630C78, 0x630BD0, 0x630BD8)},
@@ -74,8 +73,7 @@ def sample(reader: ProcessReader, base: int) -> dict:
             projection_scalars=floats(raw, 0x94, 2), ray_origin=floats(raw, 0x9C, 3),
             plane_origin=floats(raw, 0xA8, 3), plane_u=floats(raw, 0xB4, 3), plane_v=floats(raw, 0xC0, 3))
     capacity, count = struct.unpack("<II", reader.read(base + 0x469A578, 8))
-    # Native startup allocates two slots. This is NOT a connected-device count;
-    # unfilled/stale slots may exist, and only slot 0 receives decoded buttons.
+    # Two allocated slots can be stale; only slot 0 receives decoded buttons.
     if count > 2 or count > capacity or (count and not controllers):
         raise ValueError("Unexpected controller array; refusing to follow its pointer")
     result["controller_allocated_slots"] = count
@@ -94,8 +92,7 @@ def sample(reader: ProcessReader, base: int) -> dict:
                              touchpad_touched=raw[offset + 0x20],
                              legacy_axis0=floats(raw, offset + 0x24, 2))
             result["controllers"].append(entry)
-    # A race cannot be eliminated externally. Reject samples with observed
-    # pointer turnover; do not follow a replacement object with stale metadata.
+    # Reject observed pointer turnover rather than reuse metadata from another object.
     if any(reader.read(base + rva, 8) != before for rva, before in zip(pointer_rvas, pointers)):
         raise ValueError("Object pointer changed during capture; retry when loading has finished")
     return result

@@ -1,3 +1,9 @@
+<#
+.SYNOPSIS
+Read the verified game build's native VR interface pointers.
+.DESCRIPTION
+This external snapshot writes a report under out/reports and does not call game functions.
+#>
 [CmdletBinding()]
 param(
     [string]$GameDir = 'D:\SteamLibrary\steamapps\common\The Witness',

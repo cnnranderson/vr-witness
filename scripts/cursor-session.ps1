@@ -1,3 +1,9 @@
+<#
+.SYNOPSIS
+Control the persistent headset cursor and pause-menu repair.
+.DESCRIPTION
+TargetPid defaults to the sole running game; F8 toggles the repair and F9 stops it.
+#>
 [CmdletBinding()]
 param(
     [ValidateSet('start','stop','enable','disable','status')][string]$Action = 'status',

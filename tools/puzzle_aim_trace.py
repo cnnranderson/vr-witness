@@ -16,14 +16,14 @@ from runtime_state import ProcessReader, snapshot
 from controller_trace import sample as controller_sample
 from playability_trace import floats
 
-# The poll BODY remains original while its entry is detoured. No signature from
-# the detoured pause predicate is used. All windows also require exact EXE hash.
+# Check unchanged function bodies, not detoured entries, after verifying the executable hash.
 SITES = ((0x37AA80, 0x20D), (0x37A5F2, 0xE5), (0x364210, 0xA8),
          (0x1C934A, 0x17), (0x1CCAF0, 0x12C), (0x1FC40A, 8),
          (0x24960E, 15), (0x249745, 0x50))
 
 
 def sample(reader, base):
+    """Read one unsynchronized sample from a verified image; reject observed pointer turnover."""
     cursor_header = reader.read(base + 0x62D4D0, 8)
     controller_header = reader.read(base + 0x469A570, 16)
     cursor = struct.unpack("<Q", cursor_header)[0]

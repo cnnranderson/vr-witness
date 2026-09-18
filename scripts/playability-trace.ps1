@@ -1,3 +1,9 @@
+<#
+.SYNOPSIS
+Capture cached VR/input state without modifying the game.
+.DESCRIPTION
+The trace is bounded; cached controller slots do not identify connected hand roles.
+#>
 [CmdletBinding()]
 param(
     [string]$GameDir = 'D:\SteamLibrary\steamapps\common\The Witness',

@@ -31,6 +31,7 @@ class ModuleEntry(ctypes.Structure):
 
 
 class ProcessReader:
+    """Own a read-only process handle; callers must close it after use."""
     def __init__(self, pid: int):
         self.api = ctypes.WinDLL("kernel32", use_last_error=True)
         self.api.OpenProcess.argtypes = [w.DWORD, w.BOOL, w.DWORD]
@@ -91,6 +92,7 @@ class ProcessReader:
             self.api.CloseHandle(snapshot)
 
     def read(self, address: int, size: int) -> bytes:
+        """Read exactly size bytes or raise OSError/ValueError; never return a partial read."""
         buffer = ctypes.create_string_buffer(size)
         received = ctypes.c_size_t()
         if not self.api.ReadProcessMemory(self.handle, address, buffer, size, ctypes.byref(received)):
@@ -101,6 +103,7 @@ class ProcessReader:
 
 
 def snapshot(reader: ProcessReader, expected: Path) -> dict:
+    """Verify executable identity and live references, then return an unsynchronized VR snapshot."""
     executable = reader.executable()
     if executable.name.lower() != "witness64_d3d11.exe" or not executable.samefile(expected):
         raise ValueError("Target does not match the expected Witness executable")
@@ -117,9 +120,7 @@ def snapshot(reader: ProcessReader, expected: Path) -> dict:
         raise ValueError("Loaded image size differs from the inspected executable")
     base = main["base"]
 
-    # Check the particular RIP-relative instructions that establish the labels
-    # below. These instructions have no absolute addresses requiring relocation.
-    # Refuse a modified site instead of assuming a disk hash covers live memory.
+    # Verify live RIP-relative references as well as the disk hash.
     verified = []
     for rva, size in ((0x37A436, 7), (0x37A4F9, 7), (0x37A3F6, 6), (0x06722F, 7), (0x2A4041, 66)):
         offset = pe.offset(rva)
@@ -127,8 +128,7 @@ def snapshot(reader: ProcessReader, expected: Path) -> dict:
             raise ValueError(f"Live instruction mismatch at RVA 0x{rva:x}")
         verified.append(hex(rva))
 
-    # One contiguous read reduces (but does not eliminate) concurrent updates.
-    # This is an observation, not an atomic or authoritative game-state query.
+    # One contiguous read narrows the race window but does not make the snapshot atomic.
     block = reader.read(base + 0x469AB30, 0x80)
     values = {}
     for name, rva, pattern in (
@@ -139,8 +139,7 @@ def snapshot(reader: ProcessReader, expected: Path) -> dict:
         value = struct.unpack_from(pattern, block, rva - 0x469AB30)[0]
         values[name] = dict(rva=hex(rva), value=hex(value) if pattern == "<Q" else value)
 
-    # Registration associates these three scalar fields with camera setting
-    # names. Their effect on the rendered camera has NOT been validated.
+    # Registered camera settings; their effect on the rendered camera is unverified.
     settings_pointer = struct.unpack("<Q", reader.read(base + 0x61C1A0, 8))[0]
     settings = dict(pointer=hex(settings_pointer), semantics="Registered scalar settings, not a verified camera pose")
     if settings_pointer:
@@ -160,9 +159,8 @@ def snapshot(reader: ProcessReader, expected: Path) -> dict:
 
 
 def wait_for_vr(reader: ProcessReader, expected: Path, timeout: int) -> dict:
-    # snapshot verifies the exact executable and live instructions before any polling.
-    # During the wait, only read the two verified interface slots; hash/parse once,
-    # then revalidate with a fresh snapshot before returning readiness.
+    """Wait up to timeout seconds for both VR interfaces; raise ValueError on timeout."""
+    # Verify before polling the two interface slots, then revalidate before returning.
     report = snapshot(reader, expected)
     base = int(report["image_base"], 16)
     slots = [int(report["values"][name]["rva"], 16) for name in

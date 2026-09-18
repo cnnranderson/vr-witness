@@ -1,3 +1,9 @@
+<#
+.SYNOPSIS
+Build a named output directory and optionally run an affected test group.
+.DESCRIPTION
+Never rebuild a DLL loaded in the game; use a new BuildName or close the game first.
+#>
 [CmdletBinding()]
 param(
     [ValidateSet('Release', 'Debug', 'RelWithDebInfo')][string]$Configuration = 'RelWithDebInfo',
@@ -24,28 +30,27 @@ if ($Fresh) { $configureOptions += '--fresh' }
 $previousBuildPath = $env:PATH
 $previousMixedCaseBuildPath = $env:Path
 try {
-# GNU Make's recursive invocation uses its program name. Scope PATH to this
-# script and restore it below; never change the user's persisted environment.
-$env:PATH = $toolBin + ';' + $env:PATH
-$env:Path = $env:PATH
-& $cmake @configureOptions -S $projectRoot -B $buildRoot -G 'MinGW Makefiles' "-DCMAKE_C_COMPILER=$((Join-Path $toolBin 'gcc.exe').Replace('\','/'))" "-DCMAKE_CXX_COMPILER=$($compiler.Replace('\','/'))" "-DCMAKE_MAKE_PROGRAM=$($make.Replace('\','/'))" "-DCMAKE_BUILD_TYPE=$Configuration"
-if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed' }
-& $cmake --build $buildRoot --parallel 4
-if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
-if ($Test) {
-    $testArgs = @('--test-dir',$buildRoot,'--output-on-failure','--parallel',$TestJobs)
-    $patterns = @{
-        Math = '^controller_math$'
-        Input = '^(controller_math|controller_injection_smoke|stick_cursor_smoke)$'
-        Snap = '^(controller_math|snap_turn_smoke)$'
-        Render = '^render_injection_smoke$'
-        Lifecycle = '^(cursor_session_smoke|controller_session_smoke)$'
+    # Keep GNU Make on PATH only for this build process.
+    $env:PATH = $toolBin + ';' + $env:PATH
+    $env:Path = $env:PATH
+    & $cmake @configureOptions -S $projectRoot -B $buildRoot -G 'MinGW Makefiles' "-DCMAKE_C_COMPILER=$((Join-Path $toolBin 'gcc.exe').Replace('\','/'))" "-DCMAKE_CXX_COMPILER=$($compiler.Replace('\','/'))" "-DCMAKE_MAKE_PROGRAM=$($make.Replace('\','/'))" "-DCMAKE_BUILD_TYPE=$Configuration"
+    if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed' }
+    & $cmake --build $buildRoot --parallel 4
+    if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
+    if ($Test) {
+        $testArgs = @('--test-dir',$buildRoot,'--output-on-failure','--parallel',$TestJobs)
+        $patterns = @{
+            Math = '^controller_math$'
+            Input = '^(controller_math|controller_injection_smoke|stick_cursor_smoke)$'
+            Snap = '^(controller_math|snap_turn_smoke)$'
+            Render = '^render_injection_smoke$'
+            Lifecycle = '^(cursor_session_smoke|controller_session_smoke)$'
+        }
+        if ($TestSuite -ne 'All') { $testArgs += @('-R',$patterns[$TestSuite]) }
+        & $ctest @testArgs
+        if ($LASTEXITCODE -ne 0) { throw 'Smoke test failed' }
     }
-    if ($TestSuite -ne 'All') { $testArgs += @('-R',$patterns[$TestSuite]) }
-    & $ctest @testArgs
-    if ($LASTEXITCODE -ne 0) { throw 'Smoke test failed' }
-}
-Write-Output "Built in $buildRoot\bin"
+    Write-Output "Built in $buildRoot\bin"
 } finally {
     $env:PATH = $previousBuildPath
     $env:Path = $previousMixedCaseBuildPath

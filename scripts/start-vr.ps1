@@ -1,3 +1,11 @@
+<#
+.SYNOPSIS
+Start VR and enable both current mod sessions.
+.DESCRIPTION
+Reuse a running game, wait for native VR, then start or enable the tested sessions.
+.PARAMETER WaitSeconds
+Native VR readiness timeout in seconds (10..600); SteamVR/game process startup has separate limits.
+#>
 [CmdletBinding()]
 param(
     [string]$GameDir = 'D:\SteamLibrary\steamapps\common\The Witness',

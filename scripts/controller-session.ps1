@@ -1,3 +1,15 @@
+<#
+.SYNOPSIS
+Control the persistent walking, cursor and snap-turn session.
+.DESCRIPTION
+Start accepts feature flags; TargetPid defaults to the sole running game. Use the loaded BuildName.
+.PARAMETER AimSpeed
+Initial motion speed (10..300 percent of view width/s); a valid config/input.ini value overrides it.
+.PARAMETER AimSmoothingMs
+Motion smoothing time in milliseconds; applies at session start.
+.EXAMPLE
+.\scripts\controller-session.ps1 start -BuildName input-settings -LegacyAxis0 -Aim -Snap
+#>
 [CmdletBinding()]
 param(
     [ValidateSet('start','stop','enable','disable','status')][string]$Action = 'status',

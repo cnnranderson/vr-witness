@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 
 class PE:
+    """Inspect a PE file on disk without loading or executing its code."""
     def __init__(self, path: Path):
         self.path = path
         self.data = path.read_bytes()
@@ -43,6 +44,7 @@ class PE:
         return struct.unpack_from(pattern, self.data, offset)
 
     def offset(self, rva: int) -> int:
+        """Translate an image-relative address to a file offset, or reject unmapped data."""
         if 0 <= rva < self.header_size:
             return rva
         for section in self.sections:

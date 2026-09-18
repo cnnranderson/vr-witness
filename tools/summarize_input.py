@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 
 def summarize(events):
+    """Return per-role ranges, observed bits and sampled transitions; reject empty captures."""
     samples=[e for e in events if e.get("event")=="input.sample" and e.get("tick")]
     if not samples:
         raise ValueError("No valid input samples; repeat only after confirming the native poll is running")
@@ -32,7 +33,7 @@ def summarize(events):
         result["hands"].append(info)
     previous=None
     for s in samples:
-        # Changes are compact press/release and context events, never per-frame noise.
+        # Record button/context transitions instead of repeating every frame.
         key=(s["mode"],bool(s["fade"]),bool(s["focused"]),*((h["device"],h["valid"],h["pressed"]) for h in s["hands"]))
         if key!=previous:
             result["changes"].append({"seconds":round((s["tick"]-first)/1000,3),"mode":s["mode"],"paused":bool(s["fade"]),

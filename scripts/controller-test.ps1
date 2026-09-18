@@ -1,3 +1,9 @@
+<#
+.SYNOPSIS
+Capture controller input for at most 30 seconds.
+.DESCRIPTION
+Use no feature flags to observe an active session; set BuildName to its loaded build.
+#>
 [CmdletBinding()]
 param(
     [string]$GameDir = 'D:\SteamLibrary\steamapps\common\The Witness',

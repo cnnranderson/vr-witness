@@ -1,3 +1,9 @@
+<#
+.SYNOPSIS
+Observe loaded game modules with a short-lived diagnostic DLL.
+.DESCRIPTION
+TargetPid defaults to the sole running game; reports stay under out/logs.
+#>
 [CmdletBinding()]
 param(
     [string]$GameDir = 'D:\SteamLibrary\steamapps\common\The Witness',
