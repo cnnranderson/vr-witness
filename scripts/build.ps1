@@ -9,6 +9,7 @@ param(
     [ValidateSet('Release', 'Debug', 'RelWithDebInfo')][string]$Configuration = 'RelWithDebInfo',
     [switch]$Test,
     [switch]$Fresh,
+    [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9][a-zA-Z0-9.-]*)?$')][string]$Version = '0.1.0-dev',
     [ValidateSet('All','Math','Input','Snap','Render','Lifecycle')][string]$TestSuite = 'All',
     [ValidateRange(1,4)][int]$TestJobs = 4,
     [ValidatePattern('^[a-zA-Z0-9_-]+$')][string]$BuildName = 'build'
@@ -33,7 +34,7 @@ try {
     # Keep GNU Make on PATH only for this build process.
     $env:PATH = $toolBin + ';' + $env:PATH
     $env:Path = $env:PATH
-    & $cmake @configureOptions -S $projectRoot -B $buildRoot -G 'MinGW Makefiles' "-DCMAKE_C_COMPILER=$((Join-Path $toolBin 'gcc.exe').Replace('\','/'))" "-DCMAKE_CXX_COMPILER=$($compiler.Replace('\','/'))" "-DCMAKE_MAKE_PROGRAM=$($make.Replace('\','/'))" "-DCMAKE_BUILD_TYPE=$Configuration"
+    & $cmake @configureOptions -S $projectRoot -B $buildRoot -G 'MinGW Makefiles' "-DCMAKE_C_COMPILER=$((Join-Path $toolBin 'gcc.exe').Replace('\','/'))" "-DCMAKE_CXX_COMPILER=$($compiler.Replace('\','/'))" "-DCMAKE_MAKE_PROGRAM=$($make.Replace('\','/'))" "-DCMAKE_BUILD_TYPE=$Configuration" "-DWITNESS_RELEASE_VERSION=$Version"
     if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed' }
     & $cmake --build $buildRoot --parallel 4
     if ($LASTEXITCODE -ne 0) { throw 'Build failed' }

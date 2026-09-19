@@ -52,7 +52,7 @@ inline bool puzzle(const Context& c) {
     return (c.mode == 0 || c.mode == 1) && c.focused && c.tracking && !c.suppressed && c.fade == 0.f;
 }
 struct AimSettings {
-    float speed{.8f}; // Cursor view widths per second.
+    float speed{.6f}; // Cursor view widths per second.
     std::uint32_t smoothing_ms{80};
 };
 inline bool valid_settings(const AimSettings& s) {

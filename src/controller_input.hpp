@@ -37,6 +37,7 @@ struct Context {
     bool focused{}, tracking{}, suppressed{};
     float fade{};
     Vec3 forward{}, left{};
+    bool menu{}; // A fully open native menu; not inferred from puzzle mode.
 };
 inline bool finite(Axis a) {
     return std::isfinite(a.x) && std::isfinite(a.y) && std::abs(a.x) <= 1.01f && std::abs(a.y) <= 1.01f;

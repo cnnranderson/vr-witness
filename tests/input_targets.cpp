@@ -3,8 +3,21 @@
 #include <windows.h>
 using namespace witness::input;
 unsigned input_frame{}, native_polls{};
-bool fixture_back{}, fixture_polling{};
+bool fixture_back{}, fixture_menu{}, fixture_expect_swap{}, fixture_polling{};
+unsigned native_menu_events{}, native_menu_leaks{};
+void TestInputMenu(bool pressed, bool expect_swap) {
+    fixture_menu = pressed;
+    fixture_expect_swap = expect_swap;
+}
 int fixture_keyboard{};
+int fixture_navigation{-1};
+bool fixture_navigation_right{};
+unsigned native_navigation[4]{}, navigation_leaks{};
+bool navigation_held{};
+void TestInputNavigation(int direction, bool right) {
+    fixture_navigation = direction;
+    fixture_navigation_right = right;
+}
 unsigned native_back_events{}, native_back_leaks{};
 void TestInputBack(bool value) {
     fixture_back = value;
@@ -30,7 +43,10 @@ void TestInputOverride(int mode) {
     fixture_override = mode;
 }
 unsigned TestInputPhase() {
-    return fixture_override == 1 ? 10 : fixture_override == 2 ? 0 : input_frame % 240;
+    return fixture_override == 1   ? 10
+           : fixture_override == 2 ? 0
+           : fixture_override == 3 ? 90
+                                   : input_frame % 240;
 }
 unsigned phase() {
     return TestInputPhase();
@@ -53,15 +69,12 @@ int get_property(void*, std::uint32_t, int property, int* error) {
 bool get_state(void*, std::uint32_t device, ControllerState* state) {
     *state = {};
     state->packet = input_frame;
-    state->pressed = (1ull << 1) | (1ull << 33);
+    state->pressed = 1ull << 33;
     state->touched = 1ull << 32;
     if (fixture_aim && neutral())
         state->pressed = 0;
-    if (device == 2 || device == 5) {
-        state->pressed &= ~(1ull << 1);
-        if (fixture_back)
-            state->pressed |= 1ull << 1;
-    }
+    if ((device == 2 || device == 5) ? fixture_menu : fixture_back)
+        state->pressed |= 1ull << 1;
     if (fixture_recenter && (device == 1 || device == 3))
         state->pressed |= 1ull << (fixture_legacy ? 2 : 7);
     if (!fixture_legacy)
@@ -74,6 +87,21 @@ bool get_state(void*, std::uint32_t device, ControllerState* state) {
             neutral() ? Axis{} : Axis{phase() >= 70 && phase() < 110 ? -1.f : 1.f, 0};
         if (!neutral())
             state->pressed |= 1ull << 32; // Observed legacy stick deflection aliases pad-click.
+    }
+    if (fixture_navigation >= 0) {
+        auto& axis = state->axes[fixture_legacy ? 0 : 2];
+        axis = {};
+        if ((fixture_navigation_right && (device == 1 || device == 3)) ||
+            (!fixture_navigation_right && (device == 2 || device == 5))) {
+            if (fixture_navigation == 1)
+                axis.y = 1;
+            if (fixture_navigation == 2)
+                axis.y = -1;
+            if (fixture_navigation == 3)
+                axis.x = -1;
+            if (fixture_navigation == 4)
+                axis.x = 1;
+        }
     }
     return !(phase() >= 180 && phase() < 190);
 }
@@ -103,7 +131,7 @@ extern "C" __declspec(dllexport) __declspec(noinline) void TestInputPoll() {
     fixture_polling = true;
     TestInputKey(&fixture_keyboard, 0x136, !neutral());
     TestInputKey(&fixture_keyboard, 0x135, true);
-    TestInputKey(&fixture_keyboard, 0x13d, true);
+    TestInputKey(&fixture_keyboard, 0x13d, fixture_back);
     fixture_polling = false;
 }
 extern "C" __declspec(dllexport) __declspec(noinline) Vec3* TestInputMove(Vec3* out) {
@@ -123,7 +151,8 @@ extern "C" __declspec(dllexport) Context TestInputContext() {
             false,
             p >= 90 && p < 100 ? 1.f : 0.f,
             {1, 0, 0},
-            {0, 1, 0}};
+            {0, 1, 0},
+            p >= 90 && p < 100};
 }
 
 void* compositor_methods[4]{};
@@ -182,14 +211,24 @@ extern "C" __declspec(dllexport) __declspec(noinline) void TestInputVrUpdate() {
 
 extern "C" {
 __declspec(dllexport) void* TestInputKeyReturn{};
+__declspec(dllexport) void* TestInputMenuReturn{};
 }
 bool fixture_pad_pressed{}, fixture_trigger_pressed{}, fixture_menu_pressed{};
 extern "C" __declspec(dllexport) __declspec(noinline) void TestInputKey(void* keyboard, int key,
                                                                         bool pressed) {
     if (keyboard == &fixture_keyboard && !fixture_polling && key == 0x136 && pressed) {
         ++native_back_events;
-        if (!puzzle(TestInputContext()))
+        if (!puzzle(TestInputContext()) && !TestInputContext().menu)
             ++native_back_leaks;
+    }
+    if (key >= 0x13f && key <= 0x142 && keyboard == &fixture_keyboard) {
+        navigation_held = pressed;
+        if (pressed) {
+            ++native_navigation[key - 0x13f];
+            const auto c = TestInputContext();
+            if (!c.menu || !c.focused || !c.tracking)
+                ++navigation_leaks;
+        }
     }
     if (key == 0x136) {
         if (!TestInputKeyReturn)
@@ -198,6 +237,15 @@ extern "C" __declspec(dllexport) __declspec(noinline) void TestInputKey(void* ke
     }
     if (key == 0x135)
         fixture_trigger_pressed = pressed;
-    if (key == 0x13d)
+    if (key == 0x13d) {
+        if (!TestInputMenuReturn)
+            TestInputMenuReturn = WITNESS_RETURN_ADDRESS();
         fixture_menu_pressed = pressed;
+        if (keyboard == &fixture_keyboard && pressed) {
+            if (fixture_polling && fixture_expect_swap)
+                ++native_menu_leaks;
+            if (!fixture_polling)
+                ++native_menu_events;
+        }
+    }
 }

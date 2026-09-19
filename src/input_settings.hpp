@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <string_view>
 namespace witness::input {
-inline constexpr std::uint32_t default_stick_speed_percent = 40;
+inline constexpr std::uint32_t default_stick_speed_percent = 20;
 // Parse 10..300 percent of view width per second; leave result unchanged on failure.
 inline bool parse_cursor_speed(std::wstring_view text, std::uint32_t& result) {
     while (!text.empty() && (text.front() == L' ' || text.front() == L'\t'))

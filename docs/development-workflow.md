@@ -60,3 +60,21 @@ python -m pip install --target .tools/formatters -r config/formatters.txt
 Formatting touches only `src`, C++ fixtures and Python tools/tests. It skips vendored code, generated output and the game installation. The command restores its temporary Python path afterward. PowerShell commands expose comment-based help; use `Get-Help .\scripts\start-vr.ps1 -Detailed` as an example.
 
 See [the code guide](code-guide.md) for shared protocol and input contracts. Preserve live-byte guards, calling conventions and callback lifetime rules when refactoring.
+
+## Generated output retention
+
+Keep the latest full release build, current portable folder/ZIP, previous ZIP,
+local release records, save backups, and confirmed fallback binaries. Old
+experiment builds, package smoke copies, raw captures already summarized in
+reports, Python caches and downloaded installer archives can be pruned.
+Keep `.tools/w64devkit` and `.tools/formatters` for future builds and formatting.
+
+Before removing a build, inspect running game/launcher module paths and preserve
+anything loaded or referenced by current scripts. Resolve deletion paths under
+the repository, reject junctions/symlinks, and retain a cleanup inventory.
+`out/build/bin` and `out/input-settings/bin` are the confirmed batch fallback;
+never remove them merely because a newer portable package exists. The latest
+release is recorded in `out/release-records/latest.json`.
+
+Historical notes remain useful after raw captures are pruned. Keep small result
+summaries and refresh `docs/current-state.md` with the surviving paths.

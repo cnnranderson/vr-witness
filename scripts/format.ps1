@@ -13,9 +13,9 @@ $clangFormat = Join-Path $formatterRoot 'clang_format\data\bin\clang-format.exe'
 if (!(Test-Path -LiteralPath $clangFormat)) {
     throw 'Install tools: python -m pip install --target .tools/formatters -r config/formatters.txt'
 }
-$cppFiles = @(Get-ChildItem -LiteralPath (Join-Path $projectRoot 'src'), (Join-Path $projectRoot 'tests') -File |
+$cppFiles = @(Get-ChildItem -LiteralPath (Join-Path $projectRoot 'src'), (Join-Path $projectRoot 'tests') -File -Recurse |
     Where-Object { $_.Extension -in '.cpp', '.hpp' } | ForEach-Object { $_.FullName })
-$clangArgs = if ($Check) { @('--dry-run', '--Werror') } else { @('-i') }
+[string[]]$clangArgs = if ($Check) { @('--dry-run', '--Werror') } else { @('-i') }
 & $clangFormat @clangArgs @cppFiles
 if ($LASTEXITCODE -ne 0) { throw 'C++ formatting check failed.' }
 $previousPythonPath = $env:PYTHONPATH

@@ -4,6 +4,10 @@
 
 | Location | Responsibility |
 | --- | --- |
+| `src/launcher/main.cpp` | Native Status/Settings UI and its own-window smoke check |
+| `src/launcher/backend.*` | Steam discovery, settings, verified readiness and serialized loader control |
+| `src/config_path.hpp` | Resolve portable or development settings relative to the DLL |
+| `scripts/release.ps1`, `scripts/package.ps1` | Versioned build/test/package workflow and clean file allowlist |
 | `src/loader.cpp` | Validate the target, load a repo DLL, and call its diagnostic/session export |
 | `src/protocol.hpp` | Fixed x64 request/response layouts shared by loader and DLLs |
 | `src/build_validation.hpp` | Shared executable hash and exact live-byte guards |
@@ -11,7 +15,7 @@
 | `src/input_probe.cpp` | Read native hand roles and route movement, cursor, back and snap actions |
 | `src/controller_input.hpp` | Historical OpenVR state layout, axis selection and movement math |
 | `src/puzzle_aim.hpp` | Pose validation, aim projection, recenter calibration and smoothing |
-| `src/stick_cursor.hpp`, `src/snap_turn.hpp`, `src/puzzle_back.hpp` | Stateful input latches with no game-memory access |
+| `src/stick_cursor.hpp`, `src/snap_turn.hpp`, `src/controller_buttons.hpp`, `src/menu_navigation.hpp` | Stateful input latches with no game-memory access |
 | `src/input_settings.hpp` | Strict cursor-speed parsing; preserve the output on invalid input |
 | `src/win_util.hpp` | Windows handle ownership, paths, module snapshots and error conversion |
 | `tools/runtime_state.py` | Read-only process access, verified snapshots and the startup readiness wait |
@@ -28,9 +32,9 @@ All exports use the Windows x64 ABI and return a `DWORD`: zero is success; nonze
 | `WitnessSessionControl` | `SessionRequest` | Start, stop, enable, disable or query the render session |
 | `WitnessInputSessionControl` | `InputSessionRequest` | Control the input session and return its active settings/counters |
 
-Requests include their exact byte size and protocol version. `ProbeRequest` is 2064 bytes, `SessionRequest` is 2096, and `InputSessionRequest` is 2184. Static assertions enforce these layouts. Render/diagnostics use protocol 1; input uses protocol 5. Field order, widths, exported names and calling conventions are compatibility boundaries.
+Requests include their exact byte size and protocol version. `ProbeRequest` is 2064 bytes, `SessionRequest` is 2104, and `InputSessionRequest` is 2192. Static assertions enforce these layouts. Diagnostics use protocol 1; render sessions use protocol 2; input sessions use protocol 6. Field order, widths, exported names and calling conventions are compatibility boundaries.
 
-Zero-initialize requests, then populate required fields. Diagnostic duration is capped at 30,000 ms. Start requires an absolute, null-terminated UTF-16 log path within the 1024-character buffer. The loader creates a unique path and refuses overwriting an existing log.
+Zero-initialize requests, then populate required fields. Diagnostic duration is capped at 30,000 ms. Diagnostics require an absolute, null-terminated UTF-16 log path within the 1024-character buffer. Sessions also accept an empty path to disable logging (`--no-log`); `logging` reports the requested session setting. The loader creates a unique path and refuses overwriting an existing log.
 
 Session calls update their request buffer in place with state, enabled/fault flags and counters. Input calls require valid `aim_speed_percent` (10..300) and `aim_smoothing_ms` (0..250) even for status. `stick_speed_percent` must be zero on input and reports the active value on return. Input start consumes `legacy_axis0`, `pointing` and `snap_steps`; 0/1/2/4 snap steps mean off/22.5/45/90 degrees.
 
@@ -51,9 +55,12 @@ Input math headers do not call the game or Windows. `Hand` represents a role-sel
 - `Pointing::update` returns whether its delta may replace native cursor input; the output is not usable on failure.
 - `AimCalibration::update` returns true when a fresh, non-drawing A press recalibrates; `disarm` retains the rotation while requiring a new release.
 - `SnapTurn::update` returns -1, 0 or +1 and requires neutral between turns.
-- `PuzzleBack::update` returns one allowed press edge after release.
+- `BButton::update` returns one allowed press edge after release. Left B toggles pause; right B cancels puzzles or goes back in menus.
+- `MenuStick::update` produces native D-pad pulses only in an open menu, after neutral. Hold repeat starts at 350 ms and repeats every 150 ms. Each event uses a complete native press/release pair on the game input thread.
 
 Time arguments are monotonic milliseconds. Cursor positions/deltas use native cursor view units; motion/stick speeds use view widths per second. INI values are percentages and are divided by 100 at the caller. Yaw headings use radians. Projection uses the eye origin and hand orientation; it does not implement hand-position parallax.
+
+Session and launcher logs use `src/session_log.hpp`: empty paths disable file creation; complete records stop at 2 MiB per file. Disk-write failures and reaching the cap do not stop gameplay. Bounded developer captures explicitly requested with `--log` remain diagnostic output.
 
 ## Threads and lifetime
 

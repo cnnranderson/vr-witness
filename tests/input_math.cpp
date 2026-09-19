@@ -3,7 +3,8 @@
 #include "snap_turn.hpp"
 #include "stick_cursor.hpp"
 #include "input_settings.hpp"
-#include "puzzle_back.hpp"
+#include "controller_buttons.hpp"
+#include "menu_navigation.hpp"
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -15,6 +16,37 @@ void check_impl(bool v, int line) {
 #define check(...) check_impl((__VA_ARGS__), __LINE__)
 int main() {
     try {
+        MenuStick menu;
+        Hand nav;
+        nav.device = 2;
+        nav.valid = true;
+        nav.stick = 0;
+        nav.state.axes[0] = {0, 1};
+        check(menu.update(nav, true, 0) == MenuDirection::none);
+        nav.state.axes[0] = {};
+        check(menu.update(nav, true, 10) == MenuDirection::none);
+        nav.state.axes[0] = {0, 1};
+        check(menu.update(nav, true, 20) == MenuDirection::up);
+        check(menu.update(nav, true, 369) == MenuDirection::none);
+        check(menu.update(nav, true, 370) == MenuDirection::up);
+        check(menu.update(nav, true, 519) == MenuDirection::none);
+        check(menu.update(nav, true, 520) == MenuDirection::up);
+        nav.state.axes[0] = {.8f, .7f};
+        check(menu.update(nav, true, 530) == MenuDirection::right);
+        check(menu.update(nav, false, 540) == MenuDirection::none);
+        check(menu.update(nav, true, 900) == MenuDirection::none);
+        nav.state.axes[0] = {};
+        check(menu.update(nav, true, 910) == MenuDirection::none);
+        nav.state.axes[0] = {-1, 0};
+        check(menu.update(nav, true, 920) == MenuDirection::left);
+        nav.device = 3;
+        check(menu.update(nav, true, 930) == MenuDirection::none);
+        nav.state.axes[0] = {};
+        check(menu.update(nav, true, 940) == MenuDirection::none);
+        nav.state.axes[0] = {0, -1};
+        check(menu.update(nav, true, 950) == MenuDirection::down);
+        nav.valid = false;
+        check(menu.update(nav, true, 960) == MenuDirection::none);
         Movement m;
         Hand h;
         h.device = 2;
@@ -154,7 +186,7 @@ int main() {
         check(snap.update(right_hand, true, snap_tick += 10) == 0);
         right_hand.state.axes[0] = {-1, 0};
         check(snap.update(right_hand, true, snap_tick += 10) == -1);
-        PuzzleBack back;
+        BButton back;
         Hand left;
         left.valid = true;
         left.device = 4;
@@ -315,7 +347,7 @@ int main() {
         };
         check(!update(1, true, true, {.7f, .5f}));
         check(!update(1, true, false, {.7f, .5f}));
-        check(update(1, true, true, {.7f, .5f}) && std::abs(delta.x - .008f) < .0001f);
+        check(update(1, true, true, {.7f, .5f}) && std::abs(delta.x - .006f) < .0001f);
         check(!update(1, false, true, {.7f, .5f}));
         check(!update(1, true, true, {.7f, .5f}));
         check(!update(1, true, false, {.7f, .5f}));

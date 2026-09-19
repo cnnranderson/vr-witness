@@ -1,0 +1,7 @@
+Witness VR links MinHook, including HDE, and compiler/runtime libraries.
+
+MinHook and HDE: see MinHook-LICENSE.txt and MinHook-PROVENANCE.md.
+MinGW-w64 and winpthreads: see MinGW-w64-runtime.txt.
+GCC libgcc/libstdc++ runtime: see GCC-COPYING3.txt and GCC-COPYING.RUNTIME.txt.
+The w64devkit support routines are released into the public domain.
+No compiler or third-party installer is included.

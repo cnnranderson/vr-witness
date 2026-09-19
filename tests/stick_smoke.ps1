@@ -3,7 +3,7 @@ $ErrorActionPreference='Stop'
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 $base='Local\WitnessStickTest-'+[guid]::NewGuid().ToString('N')
 $events=@{}
-foreach($n in @('','-Legacy','-Aim','-Stick','-Held','-Neutral','-Recenter','-Back')) {
+foreach($n in @('','-Legacy','-Aim','-Stick','-Held','-Neutral','-Recenter','-Back','-Menu','-MenuCheck','-Paused','-Nav','-NavUp','-NavDown','-NavLeft','-NavRight','-NavHand')) {
     $events[$n]=New-Object System.Threading.EventWaitHandle($false,[System.Threading.EventResetMode]::ManualReset,($base+$n))
 }
 foreach($n in @('-Legacy','-Aim','-Stick')){$events[$n].Set()|Out-Null}
@@ -23,17 +23,17 @@ try {
     $state=Control start
     Start-Sleep -Seconds 3
     $state=Control status
-    if($state.stick_cursor_speed_percent -ne 40){throw 'Incorrect independent stick default'}
+    if($state.stick_cursor_speed_percent -ne 20){throw 'Incorrect independent stick default'}
     if($state.stick_applied -lt 5 -or $state.cancel_suppressed -lt 5){throw 'Manual input/cancel filter did not run'}
     $beforePolls=$state.polls
-    Set-Content -LiteralPath $configFile -Encoding Ascii -Value "[Input]`r`nStickCursorSpeedPercent=20"
+    Set-Content -LiteralPath $configFile -Encoding Ascii -Value "[Input]`r`nStickCursorSpeedPercent=35"
     Start-Sleep -Milliseconds 1200
     $state=Control status
-    if($state.stick_cursor_speed_percent -ne 20 -or $state.aim_speed_percent -ne 80 -or $state.aim_smoothing_ms -ne 80 -or $state.polls -le $beforePolls -or !$state.enabled){throw 'Live stick speed reload changed motion aiming or interrupted controls'}
+    if($state.stick_cursor_speed_percent -ne 35 -or $state.aim_speed_percent -ne 60 -or $state.aim_smoothing_ms -ne 80 -or $state.polls -le $beforePolls -or !$state.enabled){throw 'Live stick speed reload changed motion aiming or interrupted controls'}
     Set-Content -LiteralPath $configFile -Encoding Ascii -Value "[Input]`r`nStickCursorSpeedPercent=600`r`nMotionCursorSpeedPercent=25"
     Start-Sleep -Milliseconds 1200
     $state=Control status
-    if($state.stick_cursor_speed_percent -ne 20 -or $state.aim_speed_percent -ne 25){throw 'Independent motion speed/invalid stick reload failed'}
+    if($state.stick_cursor_speed_percent -ne 35 -or $state.aim_speed_percent -ne 25){throw 'Independent motion speed/invalid stick reload failed'}
     Set-Content -LiteralPath $configFile -Encoding Ascii -Value "[Input]`r`nStickCursorSpeedPercent=40`r`nMotionCursorSpeedPercent=80"
     Start-Sleep -Milliseconds 1200
     $state=Control status
@@ -69,10 +69,11 @@ try {
     $events['-Neutral'].Reset()|Out-Null
     Start-Sleep -Milliseconds 150
     if((Control status).stick_applied -le $before.stick_applied){throw 'Manual cursor failed to recover'}
+    $events['-MenuCheck'].Set()|Out-Null
     $backBefore=(Control status).puzzle_back_presses
     $events['-Back'].Set()|Out-Null
     Start-Sleep -Milliseconds 150
-    if((Control status).puzzle_back_presses -ne ($backBefore+1)){throw 'Left B failed to request native puzzle back'}
+    if((Control status).puzzle_back_presses -ne ($backBefore+1)){throw 'Right B failed to request native puzzle back'}
     Start-Sleep -Milliseconds 200
     if((Control status).puzzle_back_presses -ne ($backBefore+1)){throw 'Held B repeated puzzle back'}
     $events['-Aim'].Reset()|Out-Null
@@ -88,6 +89,7 @@ try {
     $events['-Back'].Set()|Out-Null
     Start-Sleep -Milliseconds 150
     if((Control status).puzzle_back_presses -ne ($backBefore+2)){throw 'Fresh B failed after puzzle entry'}
+    $events['-MenuCheck'].Reset()|Out-Null
     $state=Control disable
     $events['-Back'].Reset()|Out-Null
     Start-Sleep -Milliseconds 150
@@ -95,6 +97,30 @@ try {
     $state=Control enable
     Start-Sleep -Milliseconds 150
     if((Control status).puzzle_back_presses -ne ($backBefore+2)){throw 'Held B fired after enabling input'}
+    $events['-Back'].Reset()|Out-Null
+    $events['-MenuCheck'].Set()|Out-Null
+    Start-Sleep -Milliseconds 150
+    $events['-Menu'].Set()|Out-Null
+    Start-Sleep -Milliseconds 200
+    $events['-Menu'].Reset()|Out-Null
+    $events['-Paused'].Set()|Out-Null
+    Start-Sleep -Milliseconds 150
+    $events['-Menu'].Set()|Out-Null
+    Start-Sleep -Milliseconds 200
+    $events['-Menu'].Reset()|Out-Null
+    $events['-Nav'].Set()|Out-Null
+    foreach($hand in @('left','right')) {
+        if($hand -eq 'right'){$events['-NavHand'].Set()|Out-Null}
+        foreach($direction in @('-NavUp','-NavDown','-NavLeft','-NavRight')) {
+            Start-Sleep -Milliseconds 70
+            $events[$direction].Set()|Out-Null
+            Start-Sleep -Milliseconds 200
+            $events[$direction].Reset()|Out-Null
+        }
+    }
+    $events['-Nav'].Reset()|Out-Null
+    $events['-Paused'].Reset()|Out-Null
+    $events['-MenuCheck'].Reset()|Out-Null
     $before=Control stop
     Start-Sleep -Milliseconds 150
     $after=Control status
@@ -107,5 +133,5 @@ try {
 }
 if($fixture.ExitCode -ne 0){throw "Stick host failed: $(Get-Content -LiteralPath $metrics)"}
 $actual=Get-Content -LiteralPath $metrics|ConvertFrom-Json
-if($actual.native_back_events -lt 2 -or $actual.native_back_leaks -ne 0 -or $actual.pad_filtered -lt 5 -or $actual.key_leaks -ne 0 -or $actual.aim_leaks -ne 0 -or $actual.aim_decoy_leaks -ne 0){throw 'Independent stick/filter checks failed'}
-Write-Output 'Independent live speed settings, invalid-edit retention, left-B native puzzle back with held/context guards, manual cursor movement, neutral ownership, A return to pointing, trigger/menu and unrelated key-caller preservation, mode gates, toggles and teardown passed.'
+if($actual.nav_up -ne 2 -or $actual.nav_down -ne 2 -or $actual.nav_left -ne 2 -or $actual.nav_right -ne 2 -or $actual.navigation_leaks -ne 0 -or $actual.native_menu_events -ne 2 -or $actual.native_menu_leaks -ne 0 -or $actual.native_back_events -lt 2 -or $actual.native_back_leaks -ne 0 -or $actual.pad_filtered -lt 5 -or $actual.key_leaks -ne 0 -or $actual.aim_leaks -ne 0 -or $actual.aim_decoy_leaks -ne 0){throw 'Independent stick/filter checks failed'}
+Write-Output 'Independent live speed settings, invalid-edit retention, four-direction menu navigation from both sticks, left-B pause/resume and right-B native puzzle back with held/context guards, manual cursor movement, neutral ownership, A return to pointing, trigger/menu and unrelated key-caller preservation, mode gates, toggles and teardown passed.'

@@ -1,46 +1,58 @@
 # Current working state
 
-Updated 2026-09-18. Read this before historical experiment notes.
+Updated 2026-09-19. Read this before historical experiment notes.
 
-- Repository: `C:/Users/samic/Documents/GitHub/vr-witness`; keep development/builds/logs here. Game install stays clean.
-- Supported EXE SHA-256: `8d672d444df6a6df7130f25a517bdab1af92731fe2138dc5b324d519561d55a5`.
-- Last deployment: game PID46688, input build `input-settings`, render build `build`; no game process was running at the start of maintenance. The launcher still selects these tested builds. Verify process/status before acting.
-- Input log: `out/logs/input-session-20260918-131832-46688-c8004b86.jsonl`; render log: `out/logs/cursor-session-20260918-131822-46688-2083dcae.jsonl`.
-- Actual-game check: input1138 polls,966 movement applications,5 snaps, no fault; render4136 deferred/submitted,0 fallback/no fault. Active speeds stick40/motion80, smoothing80ms, snap45.
-- User-confirmed before this update: native stereo/6DOF, cursor/pause repair, walking/pause gating, pointing/trigger drawing, smoothing/A recenter, snap and manual/motion cursor switching.
-- User now reports everything works, including the launcher/current controls. Input settings and left-B are part of that build; extended playability remains untested. Deployment evidence: `out/reports/input-settings-status.json`.
+- Repository: `C:/Users/samic/Documents/GitHub/vr-witness`; keep development here and the game install clean.
+- Supported Steam x64 EXE SHA-256: `8d672d444df6a6df7130f25a517bdab1af92731fe2138dc5b324d519561d55a5`.
+- Latest process check: game and launcher closed. Do not assume this remains true before replacing loaded files.
+- User-confirmed baseline: native stereo/6DOF, cursor/pause repair, walking/pause gating, pointing/trigger drawing, smoothing/A recenter, snap turns, manual cursor and live speeds.
+- This update adds new defaults, optional capped logging, a B swap and pause-menu stick navigation. Owned-process checks are separate from headset validation; the new controls still need a headset check.
 
-## Controls and settings
+## Current controls and settings
 
-- `config/input.ini`: independent StickCursorSpeedPercent=40 and MotionCursorSpeedPercent=80; each10..300. Worker reloads once/sec; invalid/missing field retains last value. Reload verified in fixture, not separately exercised in actual game yet. Settings edits need no build/restart. Motion smoothing remains session option.
-- Right stick: snap only in walking mode2; manual cursor in puzzle modes0/1. Center between turns and after transitions. Right A (trigger released) recenters and returns to pointing. Right trigger clicks/draws natively; right B pauses. Left B sends native puzzle back (may cancel the drawn line first, then leave puzzle on another press).
-- F7 toggles configured input; F8 toggles render repair; F9 stops both sessions. Center sticks and release buttons after enabling/resuming.
-- Left B mapping confirmed in `input-20260918-125258-44936-3f0ddea0.jsonl`: leftdevice4 masks0/2,14 edges; rightdevice3 no presses. Native back setter RVA364210/key0x136, captured keyboard object at native pad caller return37AC55. Fresh puzzle/focus/tracking-gated press only; original next poll resumes ownership. No new native addresses.
-- Role-selected input is essential: cached slot0 missed right-stick motion. Current legacy layout [1,3,3,-1,-1] uses axis0; right A bit2, B bit1, trigger bit33, stick deflection also presses bit32. Do not guess physical labels from standard names. Puzzle stick/pad native cancel is selectively suppressed to allow manual cursor.
+- Defaults: stick 20%, pointing 60%, smoothing 80 ms, snap 22.5 degrees, legacy Knuckles compatibility on, DiagnosticLogging=0.
+- Left stick walks; right stick snaps while walking or moves the puzzle cursor. Right A recenters and restores pointing. Right trigger clicks/draws natively.
+- Left B opens/closes the game pause/settings menu. Right B sends native back in puzzles or menus; canceling a drawn line can take a press before leaving a puzzle.
+- Either stick navigates open menus: up/down selects; left/right adjusts. Center on entry; held input repeats after 350 ms, then every 150 ms. Native press/release pairs avoid stuck keys. See `docs/menu-navigation.md` for verified mapping and guards.
+- F7 toggles input, F8 toggles visual fixes, F9 stops both; focus required. Center sticks and release buttons after resuming or enabling.
+- Speeds reload within about one second. Launcher changes to smoothing/snap/bindings restart input; logging changes restart affected sessions while preserving disabled state.
+- Logging is off by default in the launcher; enabling it caps each file at 2 MiB. No activity counters are displayed. Explicit developer captures still produce logs.
+- Role-selected input is essential. Legacy layout [1,3,3,-1,-1] uses axis0; right A bit2, both B buttons bit1, trigger bit33; right-stick deflection also sets bit32. Native pad/back alias is suppressed in puzzles and menus.
 
-## Launcher
+## Portable release
 
-`Start Witness VR.bat` calls `scripts/start-vr.ps1`: start/reuse VR and game, wait for native VR, then enable both sessions. Healthy sessions are preserved; faults/different input builds are refused. The user confirmed startup works. Logs stay under out/logs.
+- Native standalone GUI under `src/launcher`; Steam discovery/Browse, Launch VR, Attach, Stop, status and settings. No installer or hardcoded game path.
+- Closing the launcher leaves fixes active. DLLs stay pinned until game exit; another build/version requires normal game exit. Exact EXE/live-code checks remain enabled.
+- Current package: `out/releases/WitnessVR-0.1.0-preview.5.zip`; runner in the same-named directory. Build: `out/release-0-1-0-preview-5-716be943`. All nine checks passed in 40.01 seconds; package/UI checks passed with logging off. Evidence: `out/release-records/WitnessVR-0.1.0-preview.5/validation.json` and `out/reports/launcher-preview5/*.png`.
+- Repeatable command: `scripts/release.ps1 -Version <new-version>`. Fresh build, All checks once, minimal ZIP. Build/source/hash records remain under `out/release-records`; ZIP checksum sits beside download.
+- Input session protocol 6 (2192 bytes), render session protocol 2 (2104 bytes), bounded diagnostics protocol 1. Empty session log path means logging disabled; use loader `--no-log`.
+- Icon: approved `assets/launcher.svg` and `.ico`, no thin border accents; embedded in EXE. Regeneration instructions in `assets/README.md`.
+- Development batch/session scripts still use the retained original `out/build/bin` + `out/input-settings/bin` binaries, with the OLD B mappings. The updated portable package is the current test target; do not confuse those copies.
 
-## Maintenance
+## Testing and housekeeping
 
-Readability cleanup is built separately in `out/maintenance-cleanup`: all 8 CTest checks passed in 39.32 seconds, plus 12 Python tests. Production build directories were not rebuilt or replaced. C++ formatting/comments, a shared build-validation header, a clearer cursor-speed parser name, Python formatting/docstrings, PowerShell help and current docs were updated; game behavior and protocol layouts are unchanged. Baseline/review evidence is under `out/maintenance`. `scripts/format.ps1 -Check` checks the pinned project-local formatters. Shared contracts: `docs/code-guide.md`.
+- Focused controller injection, B swap, both-stick menu directions and math checks passed. The log append-cap test caught a seek-position issue; it was fixed and launcher checks passed.
+- Keep output small. Prior cleanup removed 3438 obsolete files/659.98 MiB; plan/result remain in `out/reports`. Save/source backups and five development fallback binaries are protected. Old historical disassembly/capture paths may have been pruned.
+- Follow `docs/development-workflow.md`: targeted tests while iterating; All once for completed shared-protocol/loader changes. Do not rerun unchanged checks.
+- Next headset check: left B pause/resume, both sticks up/down and left/right in options, right B menu back/puzzle cancel, then confirm walking/cursor behavior after resume. No new mapping capture is needed unless behavior differs.
+- Deferred: hand-position parallax, fixed/mono puzzle fallback, Steam Frame validation and extended playability. Camera constraints: `docs/design.md`.
 
 
-## Commands
+## GitHub CI
 
-```powershell
-.\scripts\controller-session.ps1 status -BuildName input-settings
-.\scripts\cursor-session.ps1 status
-# After a later normal exit and VR relaunch, restore both:
-.\scripts\cursor-session.ps1 start
-.\scripts\controller-session.ps1 start -BuildName input-settings -LegacyAxis0 -Aim -Snap
-# Passive capture only if needed; leaves current controls running:
-.\scripts\controller-test.ps1 -BuildName input-settings -Seconds 30
-python tools/summarize_input.py out/logs/<capture>.jsonl
-```
-
-Do not rebuild input-settings or build DLLs while they are loaded in a game process. For source changes use a new output directory or normal exit. Select focused test groups during iteration; All once for completed cross-feature/ABI/lifetime changes. No need to repeat the passed suite for unchanged binaries or config/doc edits.
-
-Next: continue feature work from the cleaned source; choose a new output directory for behavior changes while a game build is loaded. No new headset capture is required for the maintenance pass.
-Deferred: controller menu navigation; hand-position parallax; fixed/mono puzzle fallback. Do not claim these work. Camera/fallback constraints: `docs/design.md`; capture/testing workflow: `docs/development-workflow.md`.
+- Remote: `https://github.com/cnnranderson/vr-witness.git`, branch `main`.
+- `.github/workflows/release.yml` builds/tests/packages main pushes, PRs and manual
+  runs; `v*` tag pushes also publish the tested ZIP and external checksum.
+  Suffix versions become prereleases. Deleted tags are ignored.
+- Uses official actions pinned to commits, a verified compiler-download cache,
+  and separate read-only build / write-enabled publication jobs. Developer
+  records stay in short-lived Actions artifacts.
+- Local validation: actionlint 1.7.12, PowerShell parsing, seven version cases,
+  mocked stable/prerelease publication and corrupt-checksum rejection passed.
+  `out/reports/ci-validation/results.json` records the checks. Existing native
+  build tests were not repeated for this workflow-only change.
+- First public-facing release requested: tag `v0.1`, title `Witness VR v0.1`.
+  The workflow normalizes that tag to binary/package version `0.1.0`. Its source
+  commit includes the portable launcher, current controls and CI. GitHub run
+  status should be checked before treating publication as complete. Commands:
+  `docs/github-releases.md`.

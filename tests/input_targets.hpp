@@ -28,4 +28,9 @@ extern bool fixture_pad_pressed, fixture_trigger_pressed, fixture_menu_pressed;
 void TestInputStickScenario(bool);
 
 void TestInputBack(bool);
+void TestInputMenu(bool, bool);
+extern unsigned native_menu_events, native_menu_leaks;
+void TestInputNavigation(int, bool);
+extern unsigned native_navigation[4], navigation_leaks;
+extern bool navigation_held;
 extern unsigned native_back_events, native_back_leaks;

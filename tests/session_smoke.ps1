@@ -69,6 +69,11 @@ try {
     $state = Control status
     if (!$state.enabled -or $state.fault) { throw 'Fresh session did not recover' }
     $state = Control stop
+    $withoutLog = & $loader --cursor-session start --test-host --pid $fixture.Id --no-log | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0 -or !$withoutLog.enabled -or $withoutLog.logging) { throw 'Session without logging failed' }
+    Start-Sleep -Milliseconds 100
+    if ((Control status).logging) { throw 'Disabled logging status changed' }
+    $state = Control stop
     foreach ($log in $sessionLogs) {
         $events = @(Get-Content -LiteralPath $log | ForEach-Object { $_ | ConvertFrom-Json })
         if ($events[0].event -ne 'session.started' -or $events[-1].event -ne 'session.stopped') { throw 'Session log lifecycle missing' }

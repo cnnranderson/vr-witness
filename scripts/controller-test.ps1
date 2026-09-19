@@ -14,9 +14,9 @@ param(
     [switch]$AimTrace,
     [switch]$Snap,
     [switch]$SnapTrace,
-    [ValidateSet('22.5','45','90')][string]$SnapAngle = '45',
+    [ValidateSet('22.5','45','90')][string]$SnapAngle = '22.5',
     [switch]$LegacyAxis0,
-    [ValidatePattern('^[a-zA-Z0-9_-]+$')][string]$BuildName = 'controller-experiment'
+    [ValidatePattern('^[a-zA-Z0-9_-]+$')][string]$BuildName = 'input-settings'
 )
 $ErrorActionPreference = 'Stop'
 if ($Snap -and $SnapTrace) { throw 'Choose Snap or SnapTrace.' }

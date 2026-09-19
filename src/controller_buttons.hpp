@@ -1,8 +1,8 @@
 #pragma once
 #include "controller_input.hpp"
 namespace witness::input {
-// Emit one left-B edge after release; context/device changes require a fresh release.
-class PuzzleBack {
+// Emit one B-button edge after release; context/device changes require a fresh release.
+class BButton {
     std::uint32_t device_{invalid_device};
     bool armed_{};
 
@@ -21,7 +21,7 @@ public:
             reset();
             device_ = hand.device;
         }
-        // Left-B-only capture: bit 1 on the current Knuckles legacy binding.
+        // Both Knuckles B buttons were observed as bit 1 on the legacy binding.
         if (!(hand.state.pressed & (1ull << 1))) {
             armed_ = true;
             return false;

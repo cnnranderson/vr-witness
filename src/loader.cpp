@@ -14,6 +14,7 @@ struct Options {
     std::filesystem::path expected_exe;
     std::filesystem::path log;
     bool test_host = false;
+    bool no_log = false;
     bool render_trace = false;
     bool defer_cursor = false;
     bool defer_menu = false;
@@ -22,8 +23,8 @@ struct Options {
     bool controller_session = false;
     bool controller_aim = false, controller_aim_trace = false;
     bool controller_snap = false, controller_snap_trace = false, snap_angle_given = false;
-    unsigned snap_steps = 2;
-    DWORD aim_speed_percent = 80, aim_smoothing_ms = 80;
+    unsigned snap_steps = 1;
+    DWORD aim_speed_percent = 60, aim_smoothing_ms = 80;
     bool aim_settings_given = false;
     std::wstring session;
 };
@@ -41,6 +42,10 @@ Options options(int argc, wchar_t** argv) {
     Options result;
     for (int i = 1; i < argc; ++i) {
         const std::wstring name = argv[i];
+        if (name == L"--no-log") {
+            result.no_log = true;
+            continue;
+        }
         if (name == L"--controller-legacy-axis0") {
             result.controller_legacy_axis0 = true;
             continue;
@@ -165,7 +170,9 @@ Options options(int argc, wchar_t** argv) {
         if (result.controller_legacy_axis0 && result.session != L"start")
             throw std::runtime_error("Legacy axis is set at session start only");
     }
-    const bool needs_log = result.session.empty() || result.session == L"start";
+    if (result.no_log && (result.session != L"start" || !result.log.empty()))
+        throw std::runtime_error("--no-log requires session start and cannot be combined with --log");
+    const bool needs_log = result.session.empty() || (result.session == L"start" && !result.no_log);
     if (!result.pid || (needs_log && result.log.empty()) || result.duration_ms > kMaxDurationMs)
         throw std::runtime_error("Provide --pid and --log; duration must be 0..30000 ms");
     if (result.test_host) {
@@ -296,7 +303,7 @@ void require_x64(HANDLE process) {
 int session_control(const Options& config, HANDLE process, const std::filesystem::path& dll) {
     SessionRequest request{};
     request.size = sizeof(request);
-    request.version = kProtocolVersion;
+    request.version = kSessionProtocolVersion;
     request.command = config.session == L"start"     ? SessionCommand::start
                       : config.session == L"stop"    ? SessionCommand::stop
                       : config.session == L"enable"  ? SessionCommand::enable
@@ -307,7 +314,7 @@ int session_control(const Options& config, HANDLE process, const std::filesystem
         std::cout << "{\"state\":\"stopped\",\"enabled\":false,\"fault\":false,\"loaded\":false}\n";
         return request.command == SessionCommand::status || request.command == SessionCommand::stop ? 0 : 1;
     }
-    if (request.command == SessionCommand::start) {
+    if (request.command == SessionCommand::start && !config.no_log) {
         const auto path = config.log.wstring();
         if (path.size() >= kPathCapacity)
             throw std::runtime_error("Log path is too long");
@@ -341,6 +348,7 @@ int session_control(const Options& config, HANDLE process, const std::filesystem
                         : request.state == SessionState::failed   ? "failed"
                                                                   : "stopped";
     std::cout << "{\"state\":\"" << state << "\",\"enabled\":" << (request.enabled ? "true" : "false")
+              << ",\"logging\":" << (request.logging ? "true" : "false")
               << ",\"fault\":" << (request.fault ? "true" : "false")
               << ",\"loaded\":true,\"deferred\":" << request.deferred
               << ",\"submitted\":" << request.submitted << ",\"fallback\":" << request.fallback << "}\n";
@@ -369,7 +377,7 @@ int input_session_control(const Options& config, HANDLE process, const std::file
         std::cout << "{\"state\":\"stopped\",\"enabled\":false,\"fault\":false,\"loaded\":false}\n";
         return request.command == SessionCommand::status || request.command == SessionCommand::stop ? 0 : 1;
     }
-    if (request.command == SessionCommand::start) {
+    if (request.command == SessionCommand::start && !config.no_log) {
         const auto path = config.log.wstring();
         if (path.size() >= kPathCapacity || std::filesystem::exists(config.log))
             throw std::runtime_error("Invalid or existing input session log");
@@ -401,6 +409,7 @@ int input_session_control(const Options& config, HANDLE process, const std::file
                         : request.state == SessionState::failed   ? "failed"
                                                                   : "stopped";
     std::cout << "{\"state\":\"" << state << "\",\"enabled\":" << (request.enabled ? "true" : "false")
+              << ",\"logging\":" << (request.logging ? "true" : "false")
               << ",\"fault\":" << (request.fault ? "true" : "false")
               << ",\"legacy_axis0\":" << (request.legacy_axis0 ? "true" : "false")
               << ",\"loaded\":true,\"polls\":" << request.polls
@@ -435,11 +444,11 @@ int wmain(int argc, wchar_t** argv) {
                L"  --defer-cursor experimentally delays scene-eye submission until after cursor drawing.\n"
                L"  --defer-menu experimentally delays scene-eye submission until after its stereo menu pass.\n"
                L"  --redraw-pause experimentally redraws paused scenes and submits after the stereo menu.\n"
-               L"  --cursor-session start|stop|enable|disable|status; --log required for start only.\n"
-               L"  --controller-session start|stop|enable|disable|status; start accepts --controller-aim; --log required for start only.\n"
+               L"  --cursor-session start|stop|enable|disable|status; start requires --log ABSOLUTE_PATH or --no-log.\n"
+               L"  --controller-session start|stop|enable|disable|status; start accepts --controller-aim; start requires --log ABSOLUTE_PATH or --no-log.\n"
                L"  --controller-trace [--controller-move] [--controller-aim | --controller-aim-trace] bounded input test.\n"
                L"  --controller-snap [--snap-angle 22.5|45|90] for capture/session start; --controller-snap-trace for passive capture.\n"
-               L"  Pointing session tuning: --aim-speed-percent 10..300 (default 80), --aim-smoothing-ms 0..250 (default 80).\n"
+               L"  Pointing session tuning: --aim-speed-percent 10..300 (default 60), --aim-smoothing-ms 0..250 (default 80).\n"
                L"  --controller-legacy-axis0 explicitly accepts the observed shared stick/trackpad compatibility axis.\n";
         return argc == 1 ? 1 : 0;
     }

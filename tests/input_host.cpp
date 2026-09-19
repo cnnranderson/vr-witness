@@ -2,6 +2,7 @@
 #include "win_util.hpp"
 #include <cmath>
 #include <iostream>
+#include <memory>
 __declspec(noinline) witness::input::Vec3 game_move() {
     witness::input::Vec3 out;
     volatile auto* result = TestInputMove(&out);
@@ -45,9 +46,23 @@ int wmain(int argc, wchar_t** argv) {
     witness::Handle stick_event(CreateEventW(nullptr, TRUE, FALSE, stick_name.c_str()));
     const auto back_name = std::wstring(argv[1]) + L"-Back";
     witness::Handle back_event(CreateEventW(nullptr, TRUE, FALSE, back_name.c_str()));
-    if (!back_event || !stick_event || !snap_event || !recenter_event || !aim_event || !stop || !legacy ||
-        !held || !neutral_event)
+    witness::Handle menu_event(
+        CreateEventW(nullptr, TRUE, FALSE, (std::wstring(argv[1]) + L"-Menu").c_str()));
+    witness::Handle menu_check(
+        CreateEventW(nullptr, TRUE, FALSE, (std::wstring(argv[1]) + L"-MenuCheck").c_str()));
+    witness::Handle paused_event(
+        CreateEventW(nullptr, TRUE, FALSE, (std::wstring(argv[1]) + L"-Paused").c_str()));
+    if (!menu_event || !menu_check || !paused_event || !back_event || !stick_event || !snap_event ||
+        !recenter_event || !aim_event || !stop || !legacy || !held || !neutral_event)
         return 3;
+    const wchar_t* nav_names[]{L"-Nav", L"-NavUp", L"-NavDown", L"-NavLeft", L"-NavRight", L"-NavHand"};
+    std::unique_ptr<witness::Handle> nav_events[6];
+    for (unsigned i = 0; i < 6; ++i) {
+        nav_events[i] = std::make_unique<witness::Handle>(
+            CreateEventW(nullptr, TRUE, FALSE, (std::wstring(argv[1]) + nav_names[i]).c_str()));
+        if (!*nav_events[i])
+            return 3;
+    }
     const auto start = GetTickCount64();
     unsigned moved{}, leaks{}, right{}, neutral{}, decoy_leaks{}, aim_changed{}, aim_leaks{},
         aim_decoy_leaks{};
@@ -56,9 +71,10 @@ int wmain(int argc, wchar_t** argv) {
     unsigned pad_filtered{}, key_leaks{};
     bool turn_in_deflection = false;
     while (WaitForSingleObject(stop.get(), 0) == WAIT_TIMEOUT && GetTickCount64() - start < 90000) {
-        TestInputOverride(WaitForSingleObject(neutral_event.get(), 0) == WAIT_OBJECT_0 ? 2
-                          : WaitForSingleObject(held.get(), 0) == WAIT_OBJECT_0        ? 1
-                                                                                       : 0);
+        TestInputOverride(WaitForSingleObject(paused_event.get(), 0) == WAIT_OBJECT_0    ? 3
+                          : WaitForSingleObject(neutral_event.get(), 0) == WAIT_OBJECT_0 ? 2
+                          : WaitForSingleObject(held.get(), 0) == WAIT_OBJECT_0          ? 1
+                                                                                         : 0);
         TestInputSetLegacy(WaitForSingleObject(legacy.get(), 0) == WAIT_OBJECT_0);
         const bool aim_scenario = WaitForSingleObject(aim_event.get(), 0) == WAIT_OBJECT_0;
         TestInputAimScenario(aim_scenario);
@@ -68,22 +84,37 @@ int wmain(int argc, wchar_t** argv) {
         const bool stick_scenario = WaitForSingleObject(stick_event.get(), 0) == WAIT_OBJECT_0;
         TestInputStickScenario(stick_scenario);
         TestInputBack(WaitForSingleObject(back_event.get(), 0) == WAIT_OBJECT_0);
+        TestInputMenu(WaitForSingleObject(menu_event.get(), 0) == WAIT_OBJECT_0,
+                      WaitForSingleObject(menu_check.get(), 0) == WAIT_OBJECT_0);
+        int nav = -1;
+        if (WaitForSingleObject(nav_events[0]->get(), 0) == WAIT_OBJECT_0) {
+            nav = 0;
+            for (int i = 1; i <= 4; ++i)
+                if (WaitForSingleObject(nav_events[i]->get(), 0) == WAIT_OBJECT_0)
+                    nav = i;
+        }
+        TestInputNavigation(nav, WaitForSingleObject(nav_events[5]->get(), 0) == WAIT_OBJECT_0);
         TestInputPoll();
+        if (navigation_held)
+            ++navigation_leaks;
         const auto result = game_move();
         const unsigned p = TestInputPhase();
-        if (!fixture_trigger_pressed || !fixture_menu_pressed)
+        if (!fixture_trigger_pressed)
             ++key_leaks;
         if (!fixture_pad_pressed &&
             ((p >= 10 && p < 60) || (p >= 70 && p < 110) || (p >= 120 && p < 140) || (p >= 150 && p < 170) ||
              (p >= 180 && p < 200) || (p >= 210 && p < 220) || p >= 230)) {
             ++pad_filtered;
             const auto c = TestInputContext();
-            if (!puzzle(c))
+            if (!puzzle(c) && !c.menu)
                 ++key_leaks;
         }
         TestInputKey(nullptr, 0x136, true);
         if (!fixture_pad_pressed)
             ++key_leaks; // unrelated caller
+        TestInputKey(nullptr, 0x13d, true);
+        if (!fixture_menu_pressed)
+            ++key_leaks;
         const bool changed =
             std::abs(result.x - .1f) > .0001f || std::abs(result.y) > .0001f || result.z != 0;
         const bool can_move = (p >= 10 && p < 40) || (p >= 70 && p < 90) || (p >= 230);
@@ -161,7 +192,11 @@ int wmain(int argc, wchar_t** argv) {
     std::cout << "{\"moved\":" << moved << ",\"right\":" << right << ",\"neutral\":" << neutral
               << ",\"leaks\":" << leaks << ",\"decoy_leaks\":" << decoy_leaks
               << ",\"aim_changed\":" << aim_changed << ",\"aim_leaks\":" << aim_leaks
-              << ",\"aim_decoy_leaks\":" << aim_decoy_leaks
+              << ",\"aim_decoy_leaks\":" << aim_decoy_leaks << ",\"nav_up\":" << native_navigation[0]
+              << ",\"nav_down\":" << native_navigation[1] << ",\"nav_left\":" << native_navigation[2]
+              << ",\"nav_right\":" << native_navigation[3] << ",\"navigation_leaks\":" << navigation_leaks
+              << ",\"native_menu_events\":" << native_menu_events
+              << ",\"native_menu_leaks\":" << native_menu_leaks
               << ",\"native_back_events\":" << native_back_events
               << ",\"native_back_leaks\":" << native_back_leaks << ",\"pad_filtered\":" << pad_filtered
               << ",\"key_leaks\":" << key_leaks << ",\"angle22\":" << angle22 << ",\"angle45\":" << angle45
@@ -169,8 +204,9 @@ int wmain(int argc, wchar_t** argv) {
               << ",\"turn_decoy_leaks\":" << turn_decoy_leaks
               << ",\"turn_repeat_leaks\":" << turn_repeat_leaks
               << ",\"turn_order_leaks\":" << turn_order_leaks << ",\"polls\":" << native_polls << "}\n";
-    return native_back_leaks || key_leaks || leaks || decoy_leaks || aim_leaks || aim_decoy_leaks ||
-                   turn_leaks || turn_decoy_leaks || turn_repeat_leaks || turn_order_leaks
+    return navigation_leaks || native_menu_leaks || native_back_leaks || key_leaks || leaks || decoy_leaks ||
+                   aim_leaks || aim_decoy_leaks || turn_leaks || turn_decoy_leaks || turn_repeat_leaks ||
+                   turn_order_leaks
                ? 4
                : 0;
 }

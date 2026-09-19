@@ -1,4 +1,5 @@
 #include "protocol.hpp"
+#include "session_log.hpp"
 #include "build_validation.hpp"
 #include "render_snapshot.hpp"
 #include "win_util.hpp"
@@ -46,6 +47,7 @@ std::atomic<std::uint64_t> paused_scene_redraws{0};
 std::atomic<bool> detailed{false}, route_fault{false}, session_stop{false};
 std::atomic<witness::SessionState> session_state{witness::SessionState::stopped};
 SRWLOCK control_lock = SRWLOCK_INIT;
+bool session_logging{};
 HANDLE session_thread{};
 std::atomic<unsigned> active{0}, active_submit{0}, pending_count{0}, event_count{0};
 thread_local bool inside_begin = false;
@@ -355,7 +357,10 @@ std::uint64_t completed_submissions() {
     return totals[submit_after_cursor].load() + totals[submit_after_menu].load();
 }
 
-void session_record(std::ofstream& log, const char* event) {
+void session_record(std::ofstream& target, const char* event) {
+    if (!target.is_open() || !target)
+        return;
+    std::ostringstream log;
     log << "{\"event\":\"" << event << "\",\"uptime_ms\":" << GetTickCount64()
         << ",\"enabled\":" << (enabled() ? "true" : "false")
         << ",\"route_fault\":" << (route_fault.load() ? "true" : "false")
@@ -364,9 +369,10 @@ void session_record(std::ofstream& log, const char* event) {
         << ",\"pause_redraw_enabled\":" << (enabled() && redraw_paused_scene.load() ? "true" : "false")
         << ",\"paused_scene_redraws\":" << paused_scene_redraws.load()
         << ",\"fallback\":" << totals[submit_fallback].load() << "}\n";
-    log.flush();
+
     if (!log)
         throw std::runtime_error("Cursor session log write failed");
+    witness::write_session_log(target, log.str());
 }
 
 DWORD WINAPI session_worker(void* argument) noexcept {
@@ -433,7 +439,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessSessionControl(void* argume
         return static_cast<DWORD>(ProbeResult::invalid_request);
     auto& response = *static_cast<SessionRequest*>(argument);
     const auto request = response;
-    if (request.size != sizeof(request) || request.version != kProtocolVersion ||
+    if (request.size != sizeof(request) || request.version != kSessionProtocolVersion ||
         request.command < SessionCommand::start || request.command > SessionCommand::status ||
         std::find(std::begin(request.log_path), std::end(request.log_path), L'\0') ==
             std::end(request.log_path))
@@ -457,11 +463,8 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessSessionControl(void* argume
                 session_thread = nullptr;
             }
             const std::filesystem::path path(request.log_path);
-            if (!path.is_absolute())
-                throw std::runtime_error("Log path must be absolute");
-            log = std::make_unique<std::ofstream>(path, std::ios::binary | std::ios::trunc);
-            if (!*log)
-                throw std::runtime_error("Cannot open cursor session log");
+            log = witness::open_session_log(path);
+            session_logging = !path.empty();
             prepare_hooks();
             detailed.store(false);
             // Redraw paused eyes and submit each after its cursor and stereo menu.
@@ -506,6 +509,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessSessionControl(void* argume
     }
     response.state = session_state.load();
     response.enabled = enabled() ? 1 : 0;
+    response.logging = session_logging ? 1 : 0;
     response.fault = route_fault.load() ? 1 : 0;
     response.deferred = totals[submit_deferred].load();
     response.submitted = completed_submissions();

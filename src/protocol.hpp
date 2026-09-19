@@ -22,7 +22,8 @@ static_assert(sizeof(ProbeRequest) == 2064);
 
 enum class SessionCommand : std::uint32_t { start = 1, stop, enable, disable, status };
 enum class SessionState : std::uint32_t { stopped, running, stopping, failed };
-// Initialize size/version/command; start also needs a terminated absolute log_path.
+inline constexpr std::uint32_t kSessionProtocolVersion = 2;
+// Start accepts an absolute log_path or an empty path to disable logging.
 // State, enabled, fault and counters are response fields.
 struct SessionRequest {
     std::uint32_t size;
@@ -34,12 +35,13 @@ struct SessionRequest {
     std::uint64_t deferred;
     std::uint64_t submitted;
     std::uint64_t fallback;
+    std::uint32_t logging; // Response: session logging was requested.
     wchar_t log_path[kPathCapacity];
 };
-static_assert(sizeof(SessionRequest) == 2096);
+static_assert(sizeof(SessionRequest) == 2104);
 
 // Input protocol versions independently of the render protocol.
-inline constexpr std::uint32_t kInputProtocolVersion = 5;
+inline constexpr std::uint32_t kInputProtocolVersion = 6;
 // Zero-initialize, set size/version/command, and supply valid speed/smoothing values for every command.
 // Start consumes feature options/log_path; state, counters and active settings are returned in place.
 struct InputSessionRequest {
@@ -66,9 +68,10 @@ struct InputSessionRequest {
     std::uint64_t stick_applied;
     std::uint64_t cancel_suppressed;
     std::uint64_t puzzle_back_presses;
+    std::uint32_t logging; // Response: session logging was requested.
     wchar_t log_path[kPathCapacity];
 };
-static_assert(sizeof(InputSessionRequest) == 2184);
+static_assert(sizeof(InputSessionRequest) == 2192);
 
 enum class ProbeResult : DWORD {
     success = 0,

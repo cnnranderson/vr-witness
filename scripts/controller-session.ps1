@@ -18,8 +18,8 @@ param(
     [switch]$LegacyAxis0,
     [switch]$Aim,
     [switch]$Snap,
-    [ValidateSet('22.5','45','90')][string]$SnapAngle = '45',
-    [ValidateRange(10,300)][int]$AimSpeed = 80,
+    [ValidateSet('22.5','45','90')][string]$SnapAngle = '22.5',
+    [ValidateRange(10,300)][int]$AimSpeed = 60,
     [ValidateRange(0,250)][int]$AimSmoothingMs = 80,
     [ValidatePattern('^[a-zA-Z0-9_-]+$')][string]$BuildName = 'input-settings'
 )
@@ -48,7 +48,7 @@ if ($Action -eq 'start') {
 if ($LASTEXITCODE -ne 0) { throw 'Input session command failed; inspect status and log. Changing loaded builds requires game restart.' }
 if ($Action -eq 'start') {
     Write-Output "Controller session log: $log"
-    if ($Aim) { Write-Output 'Right stick takes over the puzzle cursor; A (trigger released) recenters and returns to pointing. The input-settings build reads separate stick/motion speeds from config/input.ini; AimSmoothingMs affects pointing. Left B performs puzzle back. Legacy stick/pad cancellation is consumed in puzzle mode.' }
+    if ($Aim) { Write-Output 'Right stick takes over the puzzle cursor; A (trigger released) recenters and returns to pointing. The input-settings build reads separate stick/motion speeds from config/input.ini; AimSmoothingMs affects pointing. Left B opens the pause menu; right B performs puzzle back. Legacy stick/pad cancellation is consumed in puzzle mode.' }
     if ($Snap) { Write-Output "Right stick snap turning: $SnapAngle degrees, walking only. Center between turns and after puzzles/menus." }
     Write-Output 'F7 toggles controller movement, configured pointing and turning; F9 stops this and an active cursor/pause session. Center the stick and release the trigger after enabling/resuming.'
 }

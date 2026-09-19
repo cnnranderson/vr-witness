@@ -1,12 +1,15 @@
 #include "protocol.hpp"
+#include "session_log.hpp"
 #include "build_validation.hpp"
+#include "config_path.hpp"
 #include "win_util.hpp"
 #include "controller_input.hpp"
 #include "puzzle_aim.hpp"
 #include "snap_turn.hpp"
 #include "stick_cursor.hpp"
 #include "input_settings.hpp"
-#include "puzzle_back.hpp"
+#include "controller_buttons.hpp"
+#include "menu_navigation.hpp"
 #include "caller_address.hpp"
 #include <MinHook.h>
 #include <bcrypt.h>
@@ -29,9 +32,11 @@ using NativeKey = void (*)(void*, int, bool);
 NativeKey original_key{};
 void* key_site{};
 void* key_caller{};
+void* menu_caller{};
 std::atomic<std::uint64_t> stick_applied{0}, cancel_suppressed{0};
 StickCursor stick_cursor;
-PuzzleBack puzzle_back;
+BButton puzzle_back, menu_button;
+MenuStick menu_left, menu_right;
 std::atomic<std::uint64_t> back_presses{0};
 thread_local bool within_native_poll{};
 thread_local void* polled_keyboard{};
@@ -74,6 +79,7 @@ std::atomic<bool> poisoned{false};
 std::atomic<witness::SessionState> session_state{witness::SessionState::stopped};
 std::atomic<bool> session_stop{false};
 SRWLOCK control_lock = SRWLOCK_INIT;
+bool session_logging{};
 HANDLE session_thread{};
 std::atomic<bool> busy{false}, enabled{false}, allow_move{false}, legacy_axis{false}, emergency{false};
 std::atomic<unsigned> active{0};
@@ -85,7 +91,7 @@ Pointing pointing;
 AimCalibration calibration;
 AimSettings aim_settings;
 std::atomic<std::uint32_t> stick_speed_percent{default_stick_speed_percent};
-std::atomic<std::uint32_t> motion_speed_percent{80};
+std::atomic<std::uint32_t> motion_speed_percent{60};
 std::filesystem::path input_settings_file;
 bool refresh_input_settings() {
     const auto read_speed = [&](const wchar_t* key, std::atomic<std::uint32_t>& setting) {
@@ -159,6 +165,8 @@ Context context() {
         c.suppressed = suppressed != 0;
     } else
         c.suppressed = true;
+    c.menu = std::isfinite(c.fade) && c.fade >= 1.f && global<unsigned char>(0x61E99C) == 0 &&
+             global<int>(0x630010) >= 4 && global<std::uintptr_t>(0x6300E0) != 0;
     return c;
 }
 void* current_system() {
@@ -249,13 +257,17 @@ void hooked_poll() {
     }
     if (!fixture_context && s.context.focused && (GetAsyncKeyState(VK_F9) & 0x8000))
         emergency.store(true);
-    bool request_back = false;
+    bool request_back = false, request_menu = false;
+    MenuDirection navigation{};
     s.allowed =
         live_system && walking(s.context) && !s.captured && !emergency.load() && s.tick < deadline.load();
     {
         Lock lock;
         if (latest.thread != s.thread || s.tick - latest.tick > 100) {
             puzzle_back.reset();
+            menu_button.reset();
+            menu_left.reset();
+            menu_right.reset();
             stick_cursor.reset();
             movement.reset();
             pointing.reset();
@@ -269,17 +281,50 @@ void hooked_poll() {
             stick_cursor.reset();
             calibration.disarm();
         }
-        request_back = puzzle_back.update(s.hands[0], live_system && puzzle(s.context) && !s.captured &&
-                                                          allow_aim.load() && !emergency.load() &&
-                                                          s.tick < deadline.load() && polled_keyboard);
+        request_back = puzzle_back.update(
+            s.hands[1],
+            live_system &&
+                (puzzle(s.context) || (s.context.menu && s.context.focused && s.context.tracking)) &&
+                !s.captured && allow_aim.load() && !emergency.load() && s.tick < deadline.load() &&
+                polled_keyboard);
+        // The pause toggle remains available inside menus, with focus/tracking gates.
+        request_menu =
+            menu_button.update(s.hands[0], live_system && s.context.focused && s.context.tracking &&
+                                               !s.captured && allow_aim.load() && !emergency.load() &&
+                                               s.tick < deadline.load() && polled_keyboard);
+        const bool menu_allowed = live_system && s.context.menu && s.context.focused && s.context.tracking &&
+                                  !s.captured && allow_aim.load() && !emergency.load() &&
+                                  s.tick < deadline.load() && polled_keyboard;
+        const auto left = menu_left.update(s.hands[0], menu_allowed, s.tick);
+        const auto right = menu_right.update(s.hands[1], menu_allowed, s.tick);
+        navigation = left != MenuDirection::none ? left : right;
         s.snap_direction = snap_turn.update(s.hands[1], s.allowed && allow_snap.load(), s.tick);
         s.allowed = s.allowed && allow_move.load();
         s.movement = movement.update(s.hands[0], s.allowed);
         latest = s;
     }
     ++polls;
+    if (navigation != MenuDirection::none && !request_menu && !request_back && enabled.load() &&
+        allow_aim.load() && !emergency.load() && GetTickCount64() < deadline.load()) {
+        const auto c = context();
+        if (c.menu && c.focused && c.tracking) {
+            // Queue a complete native press/release pair; no held key can outlive this callback.
+            const auto key = static_cast<int>(navigation);
+            original_key(polled_keyboard, key, true);
+            original_key(polled_keyboard, key, false);
+        }
+    }
+    if (request_menu && enabled.load() && allow_aim.load() && !emergency.load() &&
+        GetTickCount64() < deadline.load()) {
+        const auto c = context();
+        if (c.focused && c.tracking)
+            original_key(polled_keyboard, 0x13d, true);
+    }
     if (request_back && enabled.load() && allow_aim.load() && !emergency.load() &&
-        GetTickCount64() < deadline.load() && puzzle(context())) {
+        GetTickCount64() < deadline.load()) {
+        const auto c = context();
+        if (!(puzzle(c) || (c.menu && c.focused && c.tracking)))
+            return;
         // Send one native back press; the next VR poll restores the physical pad state.
         original_key(polled_keyboard, 0x136, true);
         ++back_presses;
@@ -371,12 +416,17 @@ void hooked_key(void* keyboard, int key, bool pressed) {
         const auto c = context();
         Lock lock;
         // Suppress only the legacy VR pad-cancel route that also fires on stick deflection.
-        if (puzzle(c) && latest.hands[1].valid && latest.hands[1].legacy_axis && !latest.captured &&
-            latest.thread == GetCurrentThreadId() && GetTickCount64() - latest.tick <= 50) {
+        if ((puzzle(c) || (c.menu && c.focused && c.tracking)) && latest.hands[1].valid &&
+            latest.hands[1].legacy_axis && !latest.captured && latest.thread == GetCurrentThreadId() &&
+            GetTickCount64() - latest.tick <= 50) {
             pressed = false;
             ++cancel_suppressed;
         }
     }
+    // Consume only the verified native controller menu route; left B supplies its edge.
+    if (within_native_poll && caller == menu_caller && key == 0x13d && enabled.load() && allow_aim.load() &&
+        !emergency.load() && GetTickCount64() < deadline.load())
+        pressed = false;
     original_key(keyboard, key, pressed);
 }
 void hooked_vr_update() {
@@ -457,7 +507,9 @@ void validate() {
         key_site = reinterpret_cast<void*>(GetProcAddress(main, "TestInputKey"));
         const auto key_return = reinterpret_cast<void**>(GetProcAddress(main, "TestInputKeyReturn"));
         key_caller = key_return ? *key_return : nullptr;
-        if (aim_capture.load() && (!key_site || !key_caller))
+        const auto menu_return = reinterpret_cast<void**>(GetProcAddress(main, "TestInputMenuReturn"));
+        menu_caller = menu_return ? *menu_return : nullptr;
+        if (aim_capture.load() && (!key_site || !key_caller || !menu_caller))
             throw std::runtime_error("Native key fixture exports missing");
         if (snap_capture.load() && (!vr_update_site || !vr_update_caller || !yaw_pointer || !vr_yaw_pointer))
             throw std::runtime_error("Snap fixture exports missing");
@@ -465,7 +517,7 @@ void validate() {
             !fixture_aim_frame || !fixture_compositor || !cursor_caller)
             throw std::runtime_error("Input fixture exports missing");
     } else {
-        input_settings_file = own.parent_path().parent_path().parent_path() / L"config" / L"input.ini";
+        input_settings_file = witness::input_config_path(own);
         if (_wcsicmp(exe.filename().c_str(), L"witness64_d3d11.exe") ||
             sha256(exe) != "8d672d444df6a6df7130f25a517bdab1af92731fe2138dc5b324d519561d55a5")
             throw std::runtime_error("Unsupported game hash");
@@ -497,6 +549,17 @@ void validate() {
             match(game_base, 0x364210,
                   "40574883ec204863fa488bc74c8d0cb98b4cb908f6c1017409f6c1047504b001eb0232c0");
             match(game_base, 0x37ac36, "488b0523f43104440fb6c6488b08ba36010000488b8990000000e8bb95feff");
+            match(game_base, 0x37abed,
+                  "ba3d010000f30f114f28488b442438488b442440488b0558f43104488b08488b8990000000e8f995feff");
+            match(
+                game_base, 0x1F9A83,
+                "ba40010000488d05956543004889442440488d05856543008d4aff4889442438448d4a04448d4203f30f11442430895c2428895c2420e8b2550000");
+            match(
+                game_base, 0x1FB327,
+                "ba42010000488d05f94c43004889442440488d05e94c43008d4aff4889442438448d4a04448d4203f30f1144243044897c242844897c2420e80c3d0000");
+            match(game_base, 0x1FC852,
+                  "803d43214200007559f30f1005312142000f2f05666c31007233833d9d374300047c2a488b0564384300");
+            menu_caller = reinterpret_cast<void*>(game_base + 0x37AC17);
             key_site = reinterpret_cast<void*>(game_base + 0x364210);
             key_caller = reinterpret_cast<void*>(game_base + 0x37AC55);
             cursor_site = reinterpret_cast<void*>(game_base + 0x1D0E10);
@@ -566,6 +629,9 @@ void validate() {
 void set_controls(bool value) {
     Lock lock;
     puzzle_back.reset();
+    menu_button.reset();
+    menu_left.reset();
+    menu_right.reset();
     movement.reset();
     latest.movement = {};
     latest.allowed = false;
@@ -620,6 +686,9 @@ void prepare(bool moving, bool legacy, ULONGLONG until, bool aiming = false, boo
         Lock lock;
         latest = {};
         puzzle_back.reset();
+        menu_button.reset();
+        menu_left.reset();
+        menu_right.reset();
         stick_cursor.reset();
         snap_turn.reset();
         movement.reset();
@@ -760,7 +829,10 @@ void emit(std::ostream& out) {
     out << "}\n";
 }
 
-void session_record(std::ostream& log, const char* event) {
+void session_record(std::ofstream& target, const char* event) {
+    if (!target.is_open() || !target)
+        return;
+    std::ostringstream log;
     log << "{\"event\":\"" << event << "\",\"tick\":" << GetTickCount64()
         << ",\"enabled\":" << (enabled.load() && allow_move.load())
         << ",\"legacy_axis0\":" << legacy_axis.load() << ",\"polls\":" << polls.load()
@@ -776,9 +848,10 @@ void session_record(std::ostream& log, const char* event) {
         << ",\"aim_smoothing_ms\":" << aim_settings.smoothing_ms << ",\"snap_steps\":" << snap_steps.load()
         << ",\"snap_enabled\":" << (enabled.load() && allow_snap.load())
         << ",\"turn_calls\":" << turn_calls.load() << ",\"turn_applied\":" << turn_applied.load() << "}\n";
-    log.flush();
+
     if (!log)
         throw std::runtime_error("Input session log write failed");
+    witness::write_session_log(target, log.str());
 }
 std::atomic<bool> observing{false};
 DWORD observe_session(const witness::ProbeRequest& req) {
@@ -965,11 +1038,8 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessInputSessionControl(void* a
                 session_thread = nullptr;
             }
             const std::filesystem::path path(request.log_path);
-            if (!path.is_absolute())
-                throw std::runtime_error("Input session log must be absolute");
-            log = std::make_unique<std::ofstream>(path, std::ios::binary | std::ios::trunc);
-            if (!*log)
-                throw std::runtime_error("Cannot open input session log");
+            log = witness::open_session_log(path);
+            session_logging = !path.empty();
             session_stop = false;
             prepare(true, request.legacy_axis0 != 0, std::numeric_limits<ULONGLONG>::max(),
                     request.pointing != 0, false,
@@ -1009,6 +1079,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessInputSessionControl(void* a
     }
     response.state = session_state.load();
     response.enabled = response.state == SessionState::running && enabled.load() && allow_move.load();
+    response.logging = session_logging ? 1 : 0;
     response.fault = poisoned.load();
     response.legacy_axis0 = legacy_axis.load();
     response.pointing = aim_capture.load();

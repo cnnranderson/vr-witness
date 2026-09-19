@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Witness VR - puzzle panel icon</title>
+  <desc id="desc">A golden puzzle panel in a charcoal frame. The supplied Witness puzzle redrawn as a vector maze, with its completed path from the lower-left circle to the upper-right exit.</desc>
+  <defs>
+    <linearGradient id="frame" x1="52" y1="28" x2="460" y2="488" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#596B70"/>
+      <stop offset="1" stop-color="#24353C"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="112" y1="80" x2="392" y2="432" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F6CD52"/>
+      <stop offset="1" stop-color="#D99A15"/>
+    </linearGradient>
+  </defs>
+  <rect x="32" y="32" width="448" height="448" rx="40" fill="#16292F"/>
+  <rect x="32" y="24" width="448" height="448" rx="40" fill="url(#frame)"/>
+  <rect x="60" y="52" width="392" height="392" rx="19" fill="#142B32"/>
+  <rect x="68" y="60" width="376" height="376" rx="13" fill="url(#panel)"/>
+  <g stroke="#8A631D" stroke-width="22" stroke-linecap="square" stroke-linejoin="round">
+    <path d="M136 308V248H256V188H316V248H256V368H376"/>
+    <path d="M256 308H376V188M316 308V368"/>
+  </g>
+  <path d="M136 368H196V308H256V248H196V188H136V128H376V112" stroke="#FFF3C4" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="136" cy="368" r="26" fill="#FFF3C4"/>
+</svg>

@@ -2,19 +2,25 @@
 
 A Windows x64 mod for The Witness's native `-vr` mode. Development files and mod DLLs stay in this repository; the game installation is unchanged.
 
-Working on the tested PC: headset cursor and pause-menu repair, left-stick walking, right-stick snap turns, controller pointing and drawing, manual stick cursor, A recenter, left-B puzzle back, and live cursor-speed settings. The user confirmed the launcher and current controls work. Steam Frame support and extended playability still need testing.
+Working on the tested PC: headset cursor and pause-menu repair, left-stick walking, right-stick snap turns, controller pointing and drawing, manual stick cursor, A recenter, puzzle back, and live cursor-speed settings. The user confirmed the development batch launcher and current controls work; the new portable GUI still needs a headset launch/attach check. Steam Frame support and extended playability still need testing.
 
-## Start playing
+## Portable launcher
 
-1. Connect the headset and turn on both controllers.
-2. Double-click **Start Witness VR.bat** in this folder.
-3. Wait for **Ready**, focus the game, center the sticks, and release the triggers.
+The portable preview is built as `WitnessVR.exe` with a `runtime` folder and clean default settings. Extract the entire ZIP and run the executable; no installer, Python, PowerShell, compiler, or administrator access is required. It detects Steam libraries or lets the user browse to a Witness executable. The chosen path is saved beside the runner, not hardcoded in the package.
 
-The launcher starts SteamVR if needed, launches The Witness with `-vr`, waits up to five minutes for native VR, and enables both mod sessions. It reuses a running VR game and healthy sessions. Close a non-VR game normally before using it. The window stays open for status/errors; closing it after success leaves the mod running until game exit.
+The Status tab shows SteamVR, game PID, native VR readiness, and separate active/disabled/fault states for visuals and controls. Launch VR starts SteamVR and the game, then attaches automatically after readiness checks. Attach supports an already-running VR game; Stop fixes leaves the game running. Closing the launcher leaves active fixes running as requested.
 
-You can create a desktop shortcut to the batch file. Keep the actual file in this repository. No administrator privileges or rebuild are needed. Python must be installed for the read-only readiness check. Logs are under `out/logs`.
+The Settings tab offers independent stick/pointing speeds, smoothing, snap angle, legacy binding compatibility, and optional diagnostic logging. Speeds update live; other changes briefly restart affected sessions. Logging is off by default; enabled logs are capped at 2 MiB each. Settings and optional logs stay beside the executable. The original ZIP excludes machine paths, personal logs and game files.
 
-The default installation is `D:\SteamLibrary\steamapps\common\The Witness`. Another path can be passed to `scripts/start-vr.ps1 -GameDir 'E:\Games\The Witness'`.
+For future fixes, run `.\scripts\release.ps1 -Version 0.1.1` from the repository root (choose a new version each time). It builds, runs the checks once and creates `out/releases/WitnessVR-0.1.1.zip` with clean defaults. Build records stay local; an optional ZIP checksum is written beside the download.
+
+Build/package instructions and limitations: [portable launcher](docs/portable-launcher.md).
+
+GitHub Actions builds pushes/PRs and publishes a release when a version tag is pushed, such as `v0.1.0-preview.6`. See [GitHub releases](docs/github-releases.md) for one-time setup and the three release commands.
+
+## Development batch launcher
+
+`Start Witness VR.bat` remains available inside this repository and uses the existing tested development builds. Unlike the portable runner, this development script needs Python for readiness checks. Keep the batch file here and create a shortcut if desired. It starts/reuses VR and game sessions; no rebuild or administrator access is needed.
 
 ## Controls
 
@@ -24,13 +30,14 @@ The default installation is `D:\SteamLibrary\steamapps\common\The Witness`. Anot
 | Right stick | Snap turn while walking; move the cursor in puzzle mode |
 | Right trigger | Activate a puzzle, click, and draw |
 | Right A | Recenter and return from stick cursor to pointing; release the trigger first |
-| Left B | Puzzle back/cancel; a drawn line may need to be canceled before leaving the panel |
-| Right B | Pause/resume |
+| Left B | Open/close the game pause/settings menu |
+| Right B | Puzzle back/cancel, or back in menus; a drawn line may need to be canceled before leaving the panel |
+| Either stick in menus | Up/down selects an item; left/right adjusts it; hold to repeat |
 | F7 | Toggle controller features |
 | F8 | Toggle headset cursor and pause repair |
 | F9 | Stop both mod sessions |
 
-Hotkeys require game focus. Center the sticks and release buttons after enabling or resuming. The legacy Knuckles binding can alias trackpad input with stick input. Menu navigation still uses mouse/keyboard.
+Hotkeys require game focus. Center the sticks and release buttons after enabling or resuming. The legacy Knuckles binding can alias trackpad input with stick input. The new B layout and menu navigation have fixture coverage; a headset check is still needed.
 
 ## Cursor settings
 
@@ -38,13 +45,17 @@ Edit `config/input.ini` and save:
 
 ```ini
 [Input]
-StickCursorSpeedPercent=40
-MotionCursorSpeedPercent=80
+StickCursorSpeedPercent=20
+MotionCursorSpeedPercent=60
+AimSmoothingMs=80
+SnapSteps=1
+LegacyAxis0=1
+DiagnosticLogging=0
 ```
 
 Each value is independent, from 10 to 300 percent of cursor view width per second. Lower is slower. The worker reloads saved values within about one second; invalid or missing values retain the last valid setting. No restart is needed.
 
-Motion smoothing is set when the input session starts: `-AimSmoothingMs 80` (range 0..250 ms). Higher values smooth more and add lag; zero disables smoothing. `-AimSpeed` supplies the initial motion-speed fallback if its INI key is absent. Snap angles are 22.5, 45 (default), or 90 degrees via `-SnapAngle`.
+Motion smoothing is set when the input session starts: `-AimSmoothingMs 80` (range 0..250 ms). Higher values smooth more and add lag; zero disables smoothing. `-AimSpeed` supplies the initial motion-speed fallback if its INI key is absent. Snap angles are 22.5 (default), 45, or 90 degrees via `-SnapAngle`.
 
 ## Manual session commands
 
@@ -97,4 +108,4 @@ Omit feature flags for a passive capture. Logs contain both hand roles, axes, bu
 - [Testing history](docs/testing.md), [controller investigations](docs/controller-plan.md), and [research notes](docs/research.md): historical evidence, including superseded experiments.
 - [MinHook provenance](third_party/minhook/PROVENANCE.md): vendored source, license and local allocator changes.
 
-Still unfinished: controller menu navigation, hand-position parallax, fixed-view/mono puzzle presentation, a portable signed release, and Steam Frame validation. Native head tracking is preserved; freezing the headset view is not the planned puzzle fallback.
+Still needs headset validation: controller menu navigation. Still unfinished: hand-position parallax, fixed-view/mono puzzle presentation, a portable signed release, and Steam Frame validation. Native head tracking is preserved; freezing the headset view is not the planned puzzle fallback.
