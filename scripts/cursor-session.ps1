@@ -7,7 +7,7 @@ TargetPid defaults to the sole running game; F8 toggles the repair and F9 stops 
 [CmdletBinding()]
 param(
     [ValidateSet('start','stop','enable','disable','status')][string]$Action = 'status',
-    [string]$GameDir = 'D:\SteamLibrary\steamapps\common\The Witness',
+    [Parameter(Mandatory)][string]$GameDir,
     [int]$TargetPid = 0
 )
 $ErrorActionPreference = 'Stop'

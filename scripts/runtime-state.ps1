@@ -6,7 +6,7 @@ This external snapshot writes a report under out/reports and does not call game 
 #>
 [CmdletBinding()]
 param(
-    [string]$GameDir = 'D:\SteamLibrary\steamapps\common\The Witness',
+    [Parameter(Mandatory)][string]$GameDir,
     [int]$TargetPid = 0
 )
 $ErrorActionPreference = 'Stop'

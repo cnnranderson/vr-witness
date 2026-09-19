@@ -6,7 +6,7 @@ TargetPid defaults to the sole running game; reports stay under out/logs.
 #>
 [CmdletBinding()]
 param(
-    [string]$GameDir = 'D:\SteamLibrary\steamapps\common\The Witness',
+    [Parameter(Mandatory)][string]$GameDir,
     [int]$TargetPid = 0,
     [ValidateRange(0,30)][int]$Seconds = 5
 )

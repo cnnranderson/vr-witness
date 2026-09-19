@@ -11,3 +11,4 @@ AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
 BreakStringLiterals: false
 ReflowComments: false
+SeparateDefinitionBlocks: Always

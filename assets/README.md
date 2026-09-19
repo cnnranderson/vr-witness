@@ -1,10 +1,8 @@
 # Launcher icon
 
-`launcher.svg` redraws the maze and completed solution from the Witness puzzle
-screenshot supplied by the user. The approved design retains the golden panel
-and charcoal gradient border, with both thin highlight accents removed.
-The path starts at the lower-left circle and exits at the upper right.
-The puzzle layout comes from The Witness; the SVG is a vector redrawing.
+`launcher.svg` is a vector redrawing of a solved Witness puzzle, with a golden
+panel and charcoal gradient border. The path starts at the lower-left circle
+and exits at the upper right. The puzzle layout comes from The Witness.
 
 `launcher.ico` contains 16, 20, 24, 32, 40, 48, 64, 96, 128 and 256 pixel frames.
 It is embedded in the launcher executable and used for its window/taskbar icon.

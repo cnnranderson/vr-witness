@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="title desc">
-  <title id="title">Witness VR - puzzle panel icon</title>
-  <desc id="desc">A golden puzzle panel in a charcoal frame. The supplied Witness puzzle redrawn as a vector maze, with its completed path from the lower-left circle to the upper-right exit.</desc>
+  <title id="title">Witness VR</title>
+  <desc id="desc">A puzzle panel.</desc>
   <defs>
     <linearGradient id="frame" x1="52" y1="28" x2="460" y2="488" gradientUnits="userSpaceOnUse">
       <stop stop-color="#596B70"/>

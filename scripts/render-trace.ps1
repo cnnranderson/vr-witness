@@ -6,7 +6,7 @@ Stop the persistent render session before tracing; choose at most one behavior f
 #>
 [CmdletBinding()]
 param(
-    [string]$GameDir = 'D:\SteamLibrary\steamapps\common\The Witness',
+    [Parameter(Mandatory)][string]$GameDir,
     [int]$TargetPid = 0,
     [ValidateRange(1,30)][int]$Seconds = 5,
     [switch]$DeferCursor,

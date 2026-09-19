@@ -6,7 +6,7 @@ Use no feature flags to observe an active session; set BuildName to its loaded b
 #>
 [CmdletBinding()]
 param(
-    [string]$GameDir = 'D:\SteamLibrary\steamapps\common\The Witness',
+    [Parameter(Mandatory)][string]$GameDir,
     [int]$TargetPid = 0,
     [ValidateRange(1,30)][int]$Seconds = 5,
     [switch]$Move,
@@ -16,7 +16,7 @@ param(
     [switch]$SnapTrace,
     [ValidateSet('22.5','45','90')][string]$SnapAngle = '22.5',
     [switch]$LegacyAxis0,
-    [ValidatePattern('^[a-zA-Z0-9_-]+$')][string]$BuildName = 'input-settings'
+    [ValidatePattern('^[a-zA-Z0-9_-]+$')][string]$BuildName = 'dev'
 )
 $ErrorActionPreference = 'Stop'
 if ($Snap -and $SnapTrace) { throw 'Choose Snap or SnapTrace.' }

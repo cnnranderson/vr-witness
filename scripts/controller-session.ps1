@@ -8,12 +8,12 @@ Initial motion speed (10..300 percent of view width/s); a valid config/input.ini
 .PARAMETER AimSmoothingMs
 Motion smoothing time in milliseconds; applies at session start.
 .EXAMPLE
-.\scripts\controller-session.ps1 start -BuildName input-settings -LegacyAxis0 -Aim -Snap
+.\scripts\controller-session.ps1 start -GameDir 'E:\Games\The Witness' -BuildName dev -LegacyAxis0 -Aim -Snap
 #>
 [CmdletBinding()]
 param(
     [ValidateSet('start','stop','enable','disable','status')][string]$Action = 'status',
-    [string]$GameDir = 'D:\SteamLibrary\steamapps\common\The Witness',
+    [Parameter(Mandatory)][string]$GameDir,
     [int]$TargetPid = 0,
     [switch]$LegacyAxis0,
     [switch]$Aim,
@@ -21,7 +21,7 @@ param(
     [ValidateSet('22.5','45','90')][string]$SnapAngle = '22.5',
     [ValidateRange(10,300)][int]$AimSpeed = 60,
     [ValidateRange(0,250)][int]$AimSmoothingMs = 80,
-    [ValidatePattern('^[a-zA-Z0-9_-]+$')][string]$BuildName = 'input-settings'
+    [ValidatePattern('^[a-zA-Z0-9_-]+$')][string]$BuildName = 'dev'
 )
 $ErrorActionPreference = 'Stop'
 if (($PSBoundParameters.ContainsKey('AimSpeed') -or $PSBoundParameters.ContainsKey('AimSmoothingMs')) -and (!$Aim -or $Action -ne 'start')) { throw 'Pointing settings require start -Aim.' }
@@ -48,7 +48,7 @@ if ($Action -eq 'start') {
 if ($LASTEXITCODE -ne 0) { throw 'Input session command failed; inspect status and log. Changing loaded builds requires game restart.' }
 if ($Action -eq 'start') {
     Write-Output "Controller session log: $log"
-    if ($Aim) { Write-Output 'Right stick takes over the puzzle cursor; A (trigger released) recenters and returns to pointing. The input-settings build reads separate stick/motion speeds from config/input.ini; AimSmoothingMs affects pointing. Left B opens the pause menu; right B performs puzzle back. Legacy stick/pad cancellation is consumed in puzzle mode.' }
+    if ($Aim) { Write-Output 'Right stick takes over the puzzle cursor; A (trigger released) recenters and returns to pointing. Separate stick/motion speeds are read from config/input.ini; AimSmoothingMs affects pointing. Left B opens the pause menu; right B performs puzzle back. Legacy stick/pad cancellation is consumed in puzzle mode.' }
     if ($Snap) { Write-Output "Right stick snap turning: $SnapAngle degrees, walking only. Center between turns and after puzzles/menus." }
     Write-Output 'F7 toggles controller movement, configured pointing and turning; F9 stops this and an active cursor/pause session. Center the stick and release the trigger after enabling/resuming.'
 }
