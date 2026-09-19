@@ -130,3 +130,11 @@ else()
 endif()
 add_test(NAME launcher_backend COMMAND witness-launcher-test)
 set_tests_properties(launcher_backend PROPERTIES TIMEOUT 15)
+
+# Allow slower hosted process startup without extending local test deadlines.
+if("$ENV{GITHUB_ACTIONS}" STREQUAL "true")
+    set_tests_properties(
+        probe_injection_smoke render_injection_smoke cursor_session_smoke
+        controller_injection_smoke controller_session_smoke snap_turn_smoke stick_cursor_smoke
+        PROPERTIES TIMEOUT 120)
+endif()

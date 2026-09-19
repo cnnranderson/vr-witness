@@ -46,7 +46,9 @@ $previousReleasePath = $env:PATH
 try {
     $env:PATH = (Split-Path -Parent $cmake) + ';' + $env:PATH
     Write-Output "Building $Version in $buildName"
-    & (Join-Path $PSScriptRoot 'build.ps1') -BuildName $buildName -Version $Version -Configuration Release -Test -TestSuite All
+    # Hosted Windows runners have less capacity for concurrent process injection tests.
+    $testJobs = if ($env:GITHUB_ACTIONS -eq 'true') { 1 } else { 4 }
+    & (Join-Path $PSScriptRoot 'build.ps1') -BuildName $buildName -Version $Version -Configuration Release -Test -TestSuite All -TestJobs $testJobs
     if ((Get-SourceManifest) -cne $sourceManifest) {
         throw 'Source changed during the release build. No package was created; rerun after editing finishes.'
     }

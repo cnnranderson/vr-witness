@@ -69,3 +69,7 @@ folder and does not depend on your Steam installation path.
 
 References: [GitHub token permissions](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token),
 [GitHub release creation](https://cli.github.com/manual/gh_release_create).
+
+CI runs the owned-process smoke tests serially with 120-second deadlines to allow
+for slower Windows runner startup. Local release builds retain four test workers
+and their shorter deadlines. Fixture logs stay in the build-records artifact.
