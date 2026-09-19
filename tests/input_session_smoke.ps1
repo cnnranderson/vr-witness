@@ -144,7 +144,7 @@ try {
     if (!$fixture.WaitForExit(5000)) { $fixture.Kill(); $fixture.WaitForExit() }
     $stop.Dispose(); $legacy.Dispose(); $held.Dispose(); $neutral.Dispose(); $aim.Dispose(); $recenter.Dispose()
 }
-if ($fixture.ExitCode -ne 0) { throw 'Input session host failed' }
+if ($fixture.ExitCode -ne 0) { throw "Input session host failed (exit $($fixture.ExitCode)): $(Get-Content -LiteralPath $metrics)" }
 $actual = Get-Content -LiteralPath $metrics | ConvertFrom-Json
-if ($actual.moved -lt 5 -or $actual.aim_changed -lt 100 -or $actual.aim_leaks -ne 0 -or $actual.aim_decoy_leaks -ne 0 -or $actual.leaks -ne 0 -or $actual.decoy_leaks -ne 0) { throw 'Independent input counters failed' }
+if ($actual.moved -lt 5 -or $actual.aim_changed -lt 100 -or $actual.aim_leaks -ne 0 -or $actual.aim_decoy_leaks -ne 0 -or $actual.leaks -ne 0 -or $actual.decoy_leaks -ne 0) { throw "Independent input counters failed: $($actual | ConvertTo-Json -Compress)" }
 Write-Output 'Persistent input: >30s, command controls, held-stick/trigger rearm, pointing persistence and custom settings, A-button edge/drawing gates, overlap rejection, restart, bounded logging, hook restoration and host survival passed.'

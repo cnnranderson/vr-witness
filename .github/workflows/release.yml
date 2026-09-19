@@ -85,6 +85,7 @@ jobs:
           path: |
             out/release-records/
             out/release-*/source-hashes.txt
+            out/release-*/test-logs/
             out/release-*/Testing/Temporary/LastTest.log
             out/release-*/Testing/Temporary/LastTestsFailed.log
             out/release-*/CMakeFiles/CMakeConfigureLog.yaml
