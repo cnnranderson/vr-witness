@@ -23,7 +23,7 @@ Updated 2026-09-19. Read this before historical experiment notes.
 
 - Native standalone GUI under `src/launcher`; Steam discovery/Browse, Launch VR, Attach, Stop, status and settings. No installer or hardcoded game path.
 - Closing the launcher leaves fixes active. DLLs stay pinned until game exit; another build/version requires normal game exit. Exact EXE/live-code checks remain enabled.
-- Current package: `out/releases/WitnessVR-0.1.0-preview.5.zip`; runner in the same-named directory. Build: `out/release-0-1-0-preview-5-716be943`. All nine checks passed in 40.01 seconds; package/UI checks passed with logging off. Evidence: `out/release-records/WitnessVR-0.1.0-preview.5/validation.json` and `out/reports/launcher-preview5/*.png`.
+- Published package: `out/releases/WitnessVR-0.1.0.zip`, downloaded from GitHub. Tag `v0.1` points to `1cc3f6d`; all nine CI checks passed, and the downloaded ZIP checksum and 12-file layout were verified. Record: `out/reports/v0.1-publication.json`. Previous local test build: `out/release-0-1-0-preview-5-716be943`; UI evidence: `out/reports/launcher-preview5`.
 - Repeatable command: `scripts/release.ps1 -Version <new-version>`. Fresh build, All checks once, minimal ZIP. Build/source/hash records remain under `out/release-records`; ZIP checksum sits beside download.
 - Input session protocol 6 (2192 bytes), render session protocol 2 (2104 bytes), bounded diagnostics protocol 1. Empty session log path means logging disabled; use loader `--no-log`.
 - Icon: approved `assets/launcher.svg` and `.ico`, no thin border accents; embedded in EXE. Regeneration instructions in `assets/README.md`.
@@ -51,8 +51,12 @@ Updated 2026-09-19. Read this before historical experiment notes.
   mocked stable/prerelease publication and corrupt-checksum rejection passed.
   `out/reports/ci-validation/results.json` records the checks. Existing native
   build tests were not repeated for this workflow-only change.
-- First public-facing release requested: tag `v0.1`, title `Witness VR v0.1`.
-  The workflow normalizes that tag to binary/package version `0.1.0`. Its source
-  commit includes the portable launcher, current controls and CI. GitHub run
-  status should be checked before treating publication as complete. Commands:
+- Published [Witness VR v0.1](https://github.com/cnnranderson/vr-witness/releases/tag/v0.1).
+  Tag `v0.1` uses binary/package version `0.1.0`; release run `35473231140`
+  and the matching main build passed all nine checks. ZIP and checksum are assets;
+  startup instructions and remaining headset validation are in the release notes.
+- Hosted runner stalls exposed intermittent parallel fixture failures. CI now
+  runs fixtures serially with 120-second deadlines and retains their logs;
+  local tests keep four workers and shorter deadlines. No assertions were removed.
+  Both initially failing tests also passed twice locally. Release commands:
   `docs/github-releases.md`.
