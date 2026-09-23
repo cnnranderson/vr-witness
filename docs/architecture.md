@@ -31,7 +31,11 @@ The portable executable contains no screenshot or smoke-test command path.
 ## Launcher flow
 
 `Window` owns controls on the UI thread. It sends `Request` values to `Backend`
-and renders copied `Snapshot` values after a posted status message. A single
+and renders copied `Snapshot` values after a posted status message. The window
+fits the selected tab without scrolling or a routine message area. Failures
+appear once in an error dialog; routine notices are written only when debug
+logging is enabled. Session indicators use a single column of label/value rows,
+including configured height. A single
 worker owns mutable session state and serializes process inspection and loader
 calls. The shared request slot and published snapshot are protected by a mutex.
 
@@ -46,6 +50,12 @@ retry. Settings edits reload cursor speeds live; other settings restart only
 the affected sessions, retaining a disabled state. Closing the window joins the
 worker but does not stop the game's sessions.
 
+F8 is owned by the render worker, which broadcasts its desired state through a
+process-local named mapping. The input worker consumes that state; it never
+polls F8 independently. The mapping holds only an enabled bit and a toggled
+revision bit. Stopped sessions do not consume hotkeys; use Attach to Game to
+reattach. The launcher exposes both sessions as one Attach/Detach operation.
+
 ## DLL entry points
 
 All exports use the Windows x64 ABI and return a `DWORD`: zero is success; nonzero values use `ProbeResult`. `DllMain` does no initialization. Export argument buffers live in the target process and remain valid until the remote call completes.
@@ -56,11 +66,11 @@ All exports use the Windows x64 ABI and return a `DWORD`: zero is success; nonze
 | `WitnessSessionControl` | `SessionRequest` | Start, stop, enable, disable or query the render session |
 | `WitnessInputSessionControl` | `InputSessionRequest` | Control the input session and return its active settings/counters |
 
-Requests include their exact byte size and protocol version. `ProbeRequest` is 2064 bytes, `SessionRequest` is 2104, and `InputSessionRequest` is 2192. Static assertions enforce these layouts. Diagnostics use protocol 1; render sessions use protocol 2; input sessions use protocol 6. Field order, widths, exported names and calling conventions are compatibility boundaries.
+Requests include their exact byte size and protocol version. `ProbeRequest` is 2064 bytes, `SessionRequest` is 2104, and `InputSessionRequest` is 2208. Static assertions enforce these layouts. Diagnostics use protocol 1; render sessions use protocol 2; input sessions use protocol 7. Field order, widths, exported names and calling conventions are compatibility boundaries.
 
 Zero-initialize requests, then populate required fields. Diagnostic duration is capped at 30,000 ms. Diagnostics require an absolute, null-terminated UTF-16 log path within the 1024-character buffer. Sessions also accept an empty path to disable logging (`--no-log`); `logging` reports the requested session setting. The loader creates a unique path and refuses overwriting an existing log.
 
-Session calls update their request buffer in place with state, enabled/fault flags and counters. Input calls require valid `aim_speed_percent` (10..300) and `aim_smoothing_ms` (0..250) even for status. `stick_speed_percent` must be zero on input and reports the active value on return. Input start consumes `legacy_axis0`, `pointing` and `snap_steps`; 0/1/2/4 snap steps mean off/22.5/45/90 degrees.
+Session calls update their request buffer in place with state, enabled/fault flags and counters. Input calls require valid `aim_speed_percent` (10..300) and `aim_smoothing_ms` (0..250) even for status. `stick_speed_percent` must be zero on input and reports the active value on return. `height_calibrated`, `height_m` and `height_offset_m` must also be zero on input; they report the process's calibration and signed offset in meters. The input DLL validates the size/version header before copying the full request, rejecting older, smaller requests. Input start consumes `legacy_axis0`, `pointing` and `snap_steps`; 0/1/2/4 snap steps mean off/22.5/45/90 degrees.
 
 `ProbeRequest.reserved` is a DLL-specific diagnostic selector:
 
@@ -74,6 +84,7 @@ Use the loader/session scripts to construct these requests rather than writing a
 
 Input math headers do not call the game or Windows. `Hand` represents a role-selected device; `valid` and a supported `stick` index must be checked before using its axes. The legacy layout is enabled explicitly because OpenVR bit labels do not necessarily match physical Knuckles buttons.
 
+- `RestingHeight::update` captures an offset on a fresh eligible F7 press; Shift+F7 clears it. `disarm` preserves calibration but requires release. The eye-position callback owns key polling; calibration is process-local and never persisted.
 - `Movement::update` returns normalized motion after a neutral rearm; context/device changes disarm it.
 - `StickCursor::update` returns whether manual cursor owns this frame, including a zero delta while resting. A recenter hands control back to pointing.
 - `Pointing::update` returns whether its delta may replace native cursor input; the output is not usable on failure.

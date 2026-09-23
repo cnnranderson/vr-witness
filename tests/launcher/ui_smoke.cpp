@@ -39,6 +39,7 @@ void Window::ui_smoke_tick() {
     if (!smoke_output.empty()) {
         if (smoke_step == 0) {
             fs::create_directories(smoke_output);
+            capture(smoke_output / L"startup.bmp");
             auto settings = this->settings();
             settings.stick_speed = 35;
             settings.motion_speed = 70;
@@ -55,7 +56,12 @@ void Window::ui_smoke_tick() {
             command(ControlId::defaults);
             command(ControlId::save);
             TabCtrl_SetCurSel(tabs, 1);
+            fit_page();
             layout();
+            SendMessageW(controller, CB_SETCURSEL, 2, 0);
+            command(ControlId::controller_choice);
+            if (SendMessageW(controller, CB_GETCURSEL, 0, 0) != 0)
+                throw std::runtime_error("Unavailable controller was selectable");
             RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
             ++smoke_step;
             return;

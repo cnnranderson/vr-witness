@@ -44,7 +44,7 @@ struct SessionRequest {
 static_assert(sizeof(SessionRequest) == 2104);
 
 // Input protocol versions independently of the render protocol.
-inline constexpr std::uint32_t kInputProtocolVersion = 6;
+inline constexpr std::uint32_t kInputProtocolVersion = 7;
 
 // Zero-initialize, set size/version/command, and supply valid speed/smoothing values for every command.
 // Start consumes feature options/log_path; state, counters and active settings are returned in place.
@@ -74,9 +74,15 @@ struct InputSessionRequest {
     std::uint64_t puzzle_back_presses;
     std::uint32_t logging; // Response: session logging was requested.
     wchar_t log_path[kPathCapacity];
+    // Protocol 7 status outputs; calibration is process-local and never saved.
+    alignas(8) std::uint32_t height_calibrated;
+    float height_m;
+    float height_offset_m;
 };
 
-static_assert(sizeof(InputSessionRequest) == 2192);
+static_assert(offsetof(InputSessionRequest, log_path) == 140);
+static_assert(offsetof(InputSessionRequest, height_calibrated) == 2192);
+static_assert(sizeof(InputSessionRequest) == 2208);
 
 enum class ProbeResult : DWORD {
     success = 0,

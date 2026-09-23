@@ -11,7 +11,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show) {
     if (!mutex)
         return 1;
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        MessageBoxW(nullptr, L"Witness VR is already open.", L"Witness VR", MB_OK);
+        MessageBoxW(nullptr, L"The Witness VR is already open.", L"The Witness VR", MB_OK);
         return 0;
     }
 #endif

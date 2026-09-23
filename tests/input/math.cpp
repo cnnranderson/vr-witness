@@ -5,6 +5,7 @@
 #include "input/settings.hpp"
 #include "input/controller_buttons.hpp"
 #include "input/menu_navigation.hpp"
+#include "input/resting_height.hpp"
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -19,6 +20,39 @@ void check_impl(bool v, int line) {
 
 int main() {
     try {
+        RestingHeight height;
+        HeightFrame height_frame{nullptr, 1.f, 1.8f, true, true, true, false};
+        check(height.update(height_frame) == 0 && !height.calibrated()); // Held at startup.
+        const auto press_height = [&] {
+            height_frame.key_down = false;
+            height.update(height_frame);
+            height_frame.key_down = true;
+            return height.update(height_frame);
+        };
+        check(std::abs(press_height() - .8f) < .0001f && height.calibrated());
+        check(height.height() == 1.8f);
+        height_frame.tracked_height = .5f;
+        check(std::abs(height.update(height_frame) - .8f) < .0001f); // Holding preserves leaning.
+        check(std::abs(press_height() - 1.3f) < .0001f);             // Recalibration does not accumulate.
+        height_frame.can_calibrate = false;
+        height_frame.key_down = false;
+        height.update(height_frame);
+        height_frame.key_down = true;
+        height_frame.can_calibrate = true;
+        check(std::abs(height.update(height_frame) - 1.3f) < .0001f); // Release after focus returns.
+        for (float invalid : {-1.f, 4.f, std::numeric_limits<float>::quiet_NaN()}) {
+            height_frame.tracked_height = invalid;
+            check(std::abs(press_height() - 1.3f) < .0001f);
+        }
+        height_frame.tracked_height = 2.f;
+        check(std::abs(press_height() + .2f) < .0001f); // Taller poses can normalize downward.
+        height_frame.native_vr = false;
+        height_frame.reset = true;
+        check(std::abs(press_height() + .2f) < .0001f); // No key action outside native VR.
+        height_frame.native_vr = true;
+        check(std::abs(height.update(height_frame) + .2f) < .0001f);
+        check(press_height() == 0 && !height.calibrated() && height.height() == 0);
+        check(RestingHeight{}.offset() == 0);
         MenuStick menu;
         Hand nav;
         nav.device = 2;

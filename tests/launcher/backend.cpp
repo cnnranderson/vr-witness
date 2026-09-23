@@ -4,8 +4,10 @@
 #include "common/win_util.hpp"
 #include "common/config_path.hpp"
 #include "common/session_log.hpp"
+#include "common/fixes_toggle.hpp"
 #include <shellapi.h>
 #include <fstream>
+#include <cmath>
 #include <iostream>
 using namespace witness::launcher;
 
@@ -25,6 +27,22 @@ void write(const fs::path& path, const std::string& text) {
     fs::create_directories(path.parent_path());
     std::ofstream file(path);
     file << text;
+}
+
+void check_shared_fixes_toggle() {
+    witness::FixesToggle render, input;
+    require(!input.consume(), "no stale toggle on attach");
+    render.publish(false);
+    require(input.consume() == false, "render stop reaches input");
+    require(!input.consume(), "a held key cannot replay a published state");
+    render.publish(true);
+    require(input.consume() == true, "render start reaches input");
+    for (int i = 0; i < 100; ++i) {
+        render.publish(i % 2 == 0);
+        require(input.consume() == (i % 2 == 0), "bounded toggle state stays synchronized");
+    }
+    witness::FixesToggle restarted;
+    require(!restarted.consume(), "restarted session ignores old key presses");
 }
 
 void check_command_line_escaping() {
@@ -71,10 +89,12 @@ void check_settings_round_trip(const fs::path& root) {
     settings.motion_speed = 110;
     settings.smoothing_ms = 120;
     settings.snap_steps = 1;
-    settings.legacy_axis = false;
     settings.logging = true;
     save_settings(root, settings);
     require(load_settings(root) == settings, "settings round trip");
+    auto unsupported = settings;
+    unsupported.controller = ControllerType::steam_frame;
+    require(!valid_settings(unsupported), "unavailable controller is rejected");
     auto bad = settings;
     bad.stick_speed = 0;
     bool rejected = false;
@@ -88,10 +108,32 @@ void check_settings_round_trip(const fs::path& root) {
 
 void check_session_status_parsing() {
     const std::string json =
-        R"({"state":"running","loaded":true,"enabled":true,"fault":false,"logging":true,"legacy_axis0":true,"aim_speed_percent":80,"aim_smoothing_ms":80,"snap_angle":22.5})";
+        R"({"state":"running","loaded":true,"enabled":true,"fault":false,"logging":true,"legacy_axis0":true,"aim_speed_percent":80,"aim_smoothing_ms":80,"snap_angle":22.5,"height_calibrated":true,"height_m":1.69,"height_offset_m":-2.5e-1})";
     auto parsed = parse_session(json, SessionKind::input);
     require(parsed.loaded && parsed.enabled && !parsed.fault && parsed.snap_steps == 1 && parsed.logging,
             "input status parse including 22.5");
+    require(parsed.height_calibrated && std::abs(parsed.height_m - 1.69f) < .0001f &&
+                parsed.height_offset_m == -.25f,
+            "signed height status");
+    parsed = parse_session(R"({"state":"stopped","loaded":false,"enabled":false,"fault":false})",
+                           SessionKind::input);
+    require(!parsed.height_calibrated && parsed.height_m == 0 && parsed.height_offset_m == 0,
+            "new game uses default height");
+    for (const auto& calibration : {R"("height_calibrated":false,"height_m":0,"height_offset_m":0.5)",
+                                    R"("height_calibrated":true,"height_m":1.69,"height_offset_m":2)",
+                                    R"("height_calibrated":true,"height_m":1.69,"height_offset_m":"NaN")",
+                                    R"("height_calibrated":true,"height_m":1.69,"height_offset_m":-0.25x)",
+                                    R"("height_calibrated":true,"height_m":1.69)"}) {
+        bool invalid = false;
+        try {
+            parse_session(std::string(R"({"state":"running","loaded":true,"enabled":true,"fault":false,)") +
+                              calibration + "}",
+                          SessionKind::input);
+        } catch (...) {
+            invalid = true;
+        }
+        require(invalid, "invalid height status rejected");
+    }
     parsed =
         parse_session(R"({"state":"running","loaded":true,"enabled":false,"fault":false,"logging":false})",
                       SessionKind::render);
@@ -134,6 +176,7 @@ int main() {
     try {
         const auto root = fs::path(witness::module_path()).parent_path() /
                           (L"launcher-test-" + std::to_wstring(GetCurrentProcessId()));
+        check_shared_fixes_toggle();
         check_command_line_escaping();
         check_steam_library_discovery(root);
         check_settings_round_trip(root);

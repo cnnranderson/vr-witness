@@ -1,73 +1,67 @@
-WITNESS VR - PORTABLE @VERSION@
+THE WITNESS VR - PORTABLE @VERSION@
 
 QUICK START
-1. Extract the entire ZIP into a folder you can write to.
-2. Connect your PC VR headset and turn on both controllers.
-3. Run WitnessVR.exe. No installer or administrator access is required.
-4. Check the detected game folder, or use Browse to select a Witness executable.
-5. Select Launch VR. Keep the headset awake while native VR starts.
-6. Wait for Headset visuals and Controller input to show Attached and active.
+Requires Windows 10/11 x64, Steam, SteamVR, a PC VR headset, and the supported
+Steam Windows build of The Witness. Knuckles controllers are supported.
 
-Requires Windows 10/11 x64, Steam, SteamVR, and your own supported Steam Windows
-copy of The Witness. Python, PowerShell and build tools are not required.
-Steam Frame has not yet been validated. The tested controllers are Knuckles.
+1. Extract the complete ZIP into a writable folder.
+2. Connect the headset and both controllers.
+3. Run WitnessVR.exe. Check the detected installation, or select Browse.
+4. Select Launch VR and wait for both session indicators to show Active.
 
-STATUS AND CONTROL
-The launcher remains open while you play and refreshes status about every three
-seconds. Loaded, active, disabled and faulted states are shown separately.
-Attach to running game works only when that game was launched with -vr.
-Stop fixes leaves the game running. Closing the launcher leaves the fixes active.
-No files are installed into the game directory.
-
-A DLL stays loaded until the game exits, even after Stop fixes. To switch mod
-versions or move this package, close the game normally first. If another mod
-build is loaded, the launcher asks for a restart instead of replacing it.
-
-SETTINGS
-The Settings tab controls stick cursor speed, pointing speed, smoothing, snap
-angle, Knuckles legacy binding compatibility, and diagnostic logging. Click Save settings to apply.
-Cursor speeds update within about one second. Changing smoothing, snap angle
-or binding mode briefly restarts controller input; center the sticks afterward.
-Settings are stored under config beside the launcher, including the selected
-game location. Defaults contain no machine-specific installation path.
-Defaults: stick 20%, pointing 60%, smoothing 80 ms, snap 22.5 degrees, legacy on.
-Diagnostic logging is off by default. When enabled, each log stops at 2 MiB.
-Changing logging briefly restarts affected VR fixes; release the controls.
+No installer, administrator access, or build tools are required.
+The game installation stays unchanged.
 
 CONTROLS
-Left stick: walk. Right stick: snap turn while walking; cursor in puzzle mode.
-Right trigger: activate/click/draw. Right A: recenter and return to pointing.
-Left B: open/close the pause/settings menu. Right B: puzzle cancel or menu back.
-F7: toggle controller features. F8: toggle visual fixes. F9: stop both.
-Keep the game focused. Release buttons and center sticks after resuming.
-In menus, either stick navigates up/down or adjusts left/right; hold to repeat.
-Center sticks after opening a menu. The new menu controls need headset testing.
+Left stick: walk.
+Right stick: snap turn while walking; move the puzzle cursor.
+Right trigger: activate, click, and draw.
+Right A: recenter pointing and switch from stick cursor to pointing.
+Left B: toggle the pause/settings menu.
+Right B: cancel a line, leave a puzzle, or go back in menus.
+Either stick in menus: up/down selects; left/right adjusts; hold to repeat.
+F7: calibrate height while walking. Shift+F7: restore game default height.
+F8: toggle both fixes while attached.
 
-TROUBLESHOOTING
-If VR is not ready, check SteamVR and wake the headset. A non-VR game must be
-closed normally and launched again. An unsupported executable is refused;
-this preview uses exact executable and live-code checks.
-For diagnostics, enable Diagnostic logging in Settings, save, then use Open logs. Logs can contain local file paths;
-review them before sharing. The distributed ZIP contains no personal logs.
-This is an unsigned experimental mod; antivirus may flag its loader. Verify
-where the package came from and report false detections for vendor review.
-Do not disable antivirus protection to run it.
+Keep the game focused. Center sticks and release buttons after resuming.
+Release the trigger before recentering. Canceling a line and leaving a panel
+may require separate B presses.
 
-KNOWN LIMITS
-Menu navigation and the swapped B buttons still need a headset check.
-Hand-position parallax and fixed-view/mono puzzle fallback are not implemented.
-Extended playability and Steam Frame testing are pending.
-The new launcher has automated/UI checks; final headset validation is separate.
+SETTINGS
+Change values in Settings, then select Save settings.
+Defaults: stick speed 20%, pointing speed 60%, smoothing 80 ms, snap 22.5 degrees.
+Controller type: Knuckles. Xbox 360 and Steam Frame are unavailable.
+Speeds update within about one second. Other changes restart affected fixes.
+Settings are stored in config beside the launcher.
+Debug logging is off by default; each log is capped at 2 MiB.
+
+Each game launch uses its native default height. Outside puzzles and menus,
+press F7 in your resting posture to calibrate to the game's standing eye height.
+Leaning and crouching remain tracked. Shift+F7 removes the adjustment.
+Configured height shows the target and signed offset in meters, or Game default.
+Calibration is not saved between game launches.
+
+SESSIONS AND UPDATES
+Attach to Game supports a game already started with -vr.
+Detach from game stops the fixes. Closing the launcher leaves them running.
+DLLs remain loaded until the game exits. Close the game and launcher before
+updating or moving the mod. Share the original ZIP, not a used folder.
+To remove the mod, close the game and delete the extracted folder.
+
+TROUBLESHOOTING AND LIMITATIONS
+If VR is not ready, check SteamVR and wake the headset. Restart a non-VR game
+through Launch VR. Errors appear in dialogs. For diagnostics, enable Debug
+logging, reproduce the issue, and select Open logs.
+Only one verified game executable is supported. Menu navigation and height
+adjustment need headset validation. Forward movement on puzzle entry remains
+unresolved. Steam Frame and extended play need broader testing.
+The executable is unsigned.
 
 PACKAGE
-WitnessVR.exe       Portable launcher
+WitnessVR.exe       Launcher
 runtime/            Loader and two mod DLLs
 config/input.ini    Default settings
 licenses/           Third-party notices
 
-An optional ZIP checksum is provided beside the download. Build records are
-kept by the developer and are not needed to run the launcher.
-
-The launcher creates config/launcher.ini and logs locally as needed. To share a
-clean copy, share the original ZIP, not a used folder containing your settings
-and logs. Closing the game and deleting this extracted folder removes the mod.
+The launcher creates config/launcher.ini and optional logs locally.
+The ZIP checksum beside the download is optional; build records are not required.

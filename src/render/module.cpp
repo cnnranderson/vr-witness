@@ -1,5 +1,6 @@
 #include "common/protocol.hpp"
 #include "common/session_log.hpp"
+#include "common/fixes_toggle.hpp"
 #include "game/build_validation.hpp"
 #include "render/snapshot.hpp"
 #include "common/win_util.hpp"
@@ -382,25 +383,25 @@ void session_record(std::ofstream& target, const char* event) {
 DWORD WINAPI session_worker(void* argument) noexcept {
     std::unique_ptr<std::ofstream> log(static_cast<std::ofstream*>(argument));
     bool was_enabled = enabled(), was_fault = false, focused = false;
-    bool f8_was_down = true, f9_was_down = true;
+    bool f8_was_down = true;
     auto heartbeat = GetTickCount64();
     try {
+        witness::FixesToggle fixes;
         while (!session_stop.load()) {
             DWORD foreground_pid{};
             GetWindowThreadProcessId(GetForegroundWindow(), &foreground_pid);
             const bool game_focused = foreground_pid == GetCurrentProcessId();
             const bool f8 = (GetAsyncKeyState(VK_F8) & 0x8000) != 0;
-            const bool f9 = (GetAsyncKeyState(VK_F9) & 0x8000) != 0;
             // Disarm held keys across focus changes, and only accept rising edges.
             if (game_focused && focused) {
-                if (f9 && !f9_was_down)
-                    session_stop.store(true);
-                if (f8 && !f8_was_down)
-                    defer_enabled.store(!defer_enabled.load());
+                if (f8 && !f8_was_down) {
+                    const bool next = !defer_enabled.load() && !route_fault.load() && !poisoned;
+                    defer_enabled.store(next);
+                    fixes.publish(next);
+                }
             }
             focused = game_focused;
             f8_was_down = f8;
-            f9_was_down = f9;
             if (was_enabled != enabled() || was_fault != route_fault.load()) {
                 session_record(*log, "session.changed");
                 was_enabled = enabled();

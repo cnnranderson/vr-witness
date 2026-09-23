@@ -17,7 +17,7 @@ void Backend::attach() {
         auto& session = kind == SessionKind::input ? current_.input : current_.render;
         if (session.state != L"running")
             session = control(kind, L"start");
-        else if (!session.enabled)
+        if (!session.enabled)
             session = control(kind, L"enable");
         if (!session.enabled || session.fault || session.state != L"running")
             throw std::runtime_error("A mod component did not become active.");
@@ -59,14 +59,15 @@ void Backend::handle(const Request& request) {
     case Action::apply:
         apply_settings(request.settings);
         return;
-    case Action::stop:
-        stop_sessions();
-        return;
+
     case Action::launch:
         begin_startup(true);
         return;
-    case Action::attach:
-        begin_startup(false);
+    case Action::toggle_attachment:
+        if (current_.attached())
+            stop_sessions();
+        else
+            begin_startup(false);
         return;
     }
 }
@@ -87,8 +88,7 @@ void Backend::apply_settings(const Settings& settings) {
     current_.settings = settings;
     if (!current_.uncertain && current_.input.state == L"running" &&
         (current_.input.smoothing_ms != current_.settings.smoothing_ms ||
-         current_.input.snap_steps != current_.settings.snap_steps ||
-         current_.input.legacy_axis != current_.settings.legacy_axis ||
+         current_.input.snap_steps != current_.settings.snap_steps || !current_.input.legacy_axis ||
          current_.input.logging != current_.settings.logging)) {
         const bool enabled = current_.input.enabled;
         current_.input = control(SessionKind::input, L"stop");
@@ -115,7 +115,7 @@ void Backend::stop_sessions() {
         current_.input = control(SessionKind::input, L"stop");
     if (current_.render.loaded)
         current_.render = control(SessionKind::render, L"stop");
-    announce(L"VR fixes stopped. The game is still running; native rendering defects may return.");
+    announce(L"Detached from game. DLLs remain loaded until the game exits.");
 }
 
 void Backend::begin_startup(bool launch_game) {

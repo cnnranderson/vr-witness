@@ -33,6 +33,8 @@ int wmain(int argc, wchar_t** argv) {
     game_cursor();
     game_vr_update();
     TestInputPoll();
+    if (!wcscmp(argv[1], L"--height"))
+        return check_height_hook();
     witness::Handle stop(CreateEventW(nullptr, TRUE, FALSE, argv[1]));
     const auto legacy_name = std::wstring(argv[1]) + L"-Legacy";
     witness::Handle legacy(CreateEventW(nullptr, TRUE, FALSE, legacy_name.c_str()));

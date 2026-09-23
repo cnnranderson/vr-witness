@@ -13,6 +13,24 @@ origin and hand orientation; hand-position parallax is not implemented.
 Input is gated by focus, tracking, game mode, menus, and session state. Centering
 and button release are required after context changes to prevent stale input.
 
+## Resting height
+
+Every game process starts with the native eye position unchanged. On a fresh F7
+press, capture the difference between native tracked height and the game's
+standing eye height while focused, tracked and walking outside a menu. Add that
+fixed signed offset to subsequent native player eye-position results. Preserve
+later leaning and crouching; holding F7 does not continuously normalize height.
+Shift+F7 removes the offset. After invalid contexts, require key release before
+another calibration.
+
+Do not write headset poses, player-body position, world origin or saved state.
+Retain calibration through menus, focus loss and input session restarts in the
+same process. Turning fixes off suspends the offset until re-enabled. Never save
+calibration or restore it in a new game process. The launcher reports the target
+height and offset in meters, with an inactive indication when suspended.
+Native fixture coverage cannot verify world scale or stereo alignment; this
+feature needs a headset check. It does not correct puzzle-entry repositioning.
+
 ## Planned puzzle presentation
 
 Some perspective puzzles may need a fixed camera or a mono view. These modes

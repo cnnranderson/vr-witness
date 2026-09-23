@@ -3,6 +3,20 @@
 #include <windows.h>
 using namespace witness::input;
 unsigned input_frame{}, native_polls{};
+int fixture_player{};
+unsigned native_eye_calls{};
+HeightFrame fixture_height{&fixture_player, 1.f, 1.8f, true, true};
+
+extern "C" __declspec(dllexport) __declspec(noinline) Vec3* TestInputEye(Vec3* output, void*) {
+    ++native_eye_calls;
+    *output = {10, 20, 100 + fixture_height.tracked_height};
+    return output;
+}
+
+extern "C" __declspec(dllexport) HeightFrame TestInputHeightFrame() {
+    return fixture_height;
+}
+
 bool fixture_back{}, fixture_menu{}, fixture_expect_swap{}, fixture_polling{};
 unsigned native_menu_events{}, native_menu_leaks{};
 

@@ -31,6 +31,10 @@ private:
     void label(const wchar_t* text, ControlId id, Page page = Page::status);
     void create();
     void layout();
+    void fit_page();
+    int footer_top() const;
+    int content_height() const;
+    int window_height() const;
     void create_status_page();
     void layout_status_page(int width);
     void create_settings_page();
@@ -40,21 +44,22 @@ private:
     void update_values();
     void refresh();
     static std::wstring session_text(const Session& session, bool uncertain);
+    static std::wstring height_text(const Session& session, bool uncertain);
     void send(Action action, fs::path folder = {});
     void browse();
     void command(ControlId id);
 
-    HWND window{}, tabs{}, path{}, message{}, game{}, steam{}, vr{}, render{}, input{};
-    HWND stick{}, motion{}, smooth{}, snap{}, legacy{}, logging{}, stick_value{}, motion_value{},
+    HWND window{}, tabs{}, path{}, game{}, steam{}, vr{}, render{}, input{};
+    HWND stick{}, motion{}, smooth{}, snap{}, controller{}, logging{}, stick_value{}, motion_value{},
         smooth_value{};
-    HFONT font{}, title_font{}, bold_font{};
+    HFONT font{}, bold_font{};
     HBRUSH background{CreateSolidBrush(RGB(246, 248, 251))};
     std::vector<HWND> status_widgets, settings_widgets, action_buttons;
     std::unique_ptr<Backend> backend;
     fs::path root;
     int dpi{96};
-    int scroll{};
-    bool dirty{};
+    std::wstring last_error;
+    bool dirty{}, active{};
 #ifdef WITNESS_UI_TEST
     void capture(const fs::path& output);
     void ui_smoke_tick();

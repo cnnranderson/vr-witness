@@ -2,7 +2,7 @@
 .SYNOPSIS
 Control the persistent headset cursor and pause-menu repair.
 .DESCRIPTION
-TargetPid defaults to the sole running game; F8 toggles the repair and F9 stops it.
+TargetPid defaults to the sole running game; F8 toggles visuals and an active controller session.
 #>
 [CmdletBinding()]
 param(
@@ -27,5 +27,5 @@ if ($Action -eq 'start') {
 if ($LASTEXITCODE -ne 0) { throw 'Cursor/pause session command failed. Inspect status and the most recent session log.' }
 if ($Action -eq 'start') {
     Write-Output "Cursor/pause session log: $log"
-    Write-Output 'With the game focused: F8 toggles cursor and pause fixes; F9 stops the session. Close the game before rebuilding.'
+    Write-Output 'With the game focused: F8 toggles both active fix sessions. Use the stop action to detach. Close the game before rebuilding.'
 }

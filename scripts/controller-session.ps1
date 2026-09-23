@@ -50,5 +50,5 @@ if ($Action -eq 'start') {
     Write-Output "Controller session log: $log"
     if ($Aim) { Write-Output 'Right stick takes over the puzzle cursor; A (trigger released) recenters and returns to pointing. Separate stick/motion speeds are read from config/input.ini; AimSmoothingMs affects pointing. Left B opens the pause menu; right B performs puzzle back. Legacy stick/pad cancellation is consumed in puzzle mode.' }
     if ($Snap) { Write-Output "Right stick snap turning: $SnapAngle degrees, walking only. Center between turns and after puzzles/menus." }
-    Write-Output 'F7 toggles controller movement, configured pointing and turning; F9 stops this and an active cursor/pause session. Center the stick and release the trigger after enabling/resuming.'
+    Write-Output 'With the visual session also running, F8 toggles both fixes. Use the stop action to detach. Center the sticks and release triggers after enabling/resuming.'
 }

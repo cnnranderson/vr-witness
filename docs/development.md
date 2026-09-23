@@ -25,12 +25,12 @@ binaries requires process exit. Game files and the shipped OpenVR DLL stay uncha
 | Suite | Coverage |
 | --- | --- |
 | Math | Input transformations, smoothing, latches, buttons, and menu repeat |
-| Input | Math, input injection, and manual cursor routing |
+| Input | Math, input injection, manual cursor and resting-height routing |
 | Snap | Math and snap-turn routing |
 | Render | Eye submission, pause redraw, and route-fault behavior |
 | Lifecycle | Persistent input/render sessions, stop/start, and callback lifetime |
 | Launcher | Argument quoting, Steam discovery, settings, status parsing, and bounded logs |
-| All | All nine native checks |
+| All | All ten native checks |
 
 Run the affected suite during iteration and All after a completed cross-feature,
 loader, ABI, or lifetime change. Tests start their own fixture processes; they
@@ -81,6 +81,10 @@ brief edges. Cached device slots are not hand roles. Logs stay under `out/logs`.
 `runtime-state.ps1` reads verified native VR state; `probe.ps1` inventories loaded
 modules; `render-trace.ps1` captures the guarded render routes. Each script has
 PowerShell help. Python 3.10+ is needed only for the Python diagnostic tools.
+
+For excessive movement when entering puzzles, use the bounded read-only
+[puzzle-entry capture](puzzle-positioning.md). It works alongside the current
+release without rebuilding or restarting DLLs.
 
 ## Formatting
 

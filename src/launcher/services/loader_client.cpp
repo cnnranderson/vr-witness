@@ -2,6 +2,7 @@
 #include "launcher/services/platform.hpp"
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <optional>
 #include <regex>
 
@@ -67,8 +68,9 @@ std::string run_loader(const fs::path& executable, const std::vector<std::wstrin
 }
 
 std::optional<std::string> field(const std::string& json, const std::string& key) {
-    const std::regex pattern("\\\"" + key +
-                             "\\\"\\s*:\\s*(\\\"[^\\\"]*\\\"|true|false|[0-9]+(?:\\.[0-9]+)?)");
+    const std::regex pattern(
+        "\\\"" + key +
+        "\\\"\\s*:\\s*(\\\"[^\\\"]*\\\"|true|false|-?[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)(?=\\s*[,}])");
     std::smatch match;
     if (!std::regex_search(json, match, pattern))
         return std::nullopt;
@@ -80,6 +82,17 @@ bool boolean(const std::string& json, const std::string& key) {
     if (!value || (*value != "true" && *value != "false"))
         throw std::runtime_error("Invalid loader status: " + key);
     return *value == "true";
+}
+
+float number(const std::string& json, const std::string& key) {
+    const auto value = field(json, key);
+    if (!value)
+        throw std::runtime_error("Missing loader status: " + key);
+    std::size_t consumed{};
+    const auto result = std::stof(*value, &consumed);
+    if (consumed != value->size() || !std::isfinite(result))
+        throw std::runtime_error("Invalid loader status: " + key);
+    return result;
 }
 
 int integer(const std::string& json, const std::string& key) {
@@ -125,6 +138,15 @@ Session parse_session(const std::string& json, SessionKind kind) {
                              : angle && *angle == "90" ? 4
                                                        : 0;
         session.legacy_axis = field(json, "legacy_axis0") && boolean(json, "legacy_axis0");
+        if (session.loaded) {
+            session.height_calibrated = boolean(json, "height_calibrated");
+            session.height_m = number(json, "height_m");
+            session.height_offset_m = number(json, "height_offset_m");
+            if (session.height_calibrated
+                    ? session.height_m <= 0 || std::abs(session.height_offset_m) > session.height_m
+                    : session.height_m != 0 || session.height_offset_m != 0)
+                throw std::runtime_error("Invalid loader height calibration.");
+        }
     }
     return session;
 }
@@ -154,7 +176,7 @@ Session send_session_command(const fs::path& root, DWORD pid, const fs::path& ga
             args.insert(args.end(),
                         {L"--controller-aim", L"--aim-speed-percent", std::to_wstring(settings.motion_speed),
                          L"--aim-smoothing-ms", std::to_wstring(settings.smoothing_ms)});
-            if (settings.legacy_axis)
+            if (settings.controller == ControllerType::knuckles)
                 args.push_back(L"--controller-legacy-axis0");
             if (settings.snap_steps)
                 args.insert(args.end(), {L"--controller-snap", L"--snap-angle",

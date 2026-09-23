@@ -11,14 +11,13 @@ namespace witness::launcher {
 Window::~Window() {
     backend.reset();
     DeleteObject(font);
-    DeleteObject(title_font);
     DeleteObject(bold_font);
     DeleteObject(background);
 }
 
 void Window::send(Action action, fs::path folder) {
     if (backend && !backend->request({action, std::move(folder), settings()}))
-        SetWindowTextW(message, L"Finishing the current operation. Please try again in a moment.");
+        MessageBeep(MB_OK);
 }
 
 void Window::browse() {
@@ -48,10 +47,7 @@ void Window::command(ControlId id) {
         send(Action::launch);
         break;
     case ControlId::attach:
-        send(Action::attach);
-        break;
-    case ControlId::stop:
-        send(Action::stop);
+        send(Action::toggle_attachment);
         break;
     case ControlId::cancel:
         send(Action::cancel);
@@ -64,8 +60,11 @@ void Window::command(ControlId id) {
         fill_settings(Settings{});
         dirty = true;
         break;
+    case ControlId::controller_choice:
+        // Native combo boxes have no per-item disabled state; reject unavailable choices.
+        SendMessageW(controller, CB_SETCURSEL, 0, 0);
+        break;
     case ControlId::snap_choice:
-    case ControlId::legacy_binding:
     case ControlId::logging:
         dirty = true;
         break;
@@ -98,47 +97,49 @@ LRESULT CALLBACK Window::window_proc(HWND window, UINT message, WPARAM wparam, L
             return 0;
         case WM_GETMINMAXINFO: {
             auto* limits = reinterpret_cast<MINMAXINFO*>(lparam);
-            limits->ptMinTrackSize = {app->scale(780), app->scale(540)};
+            limits->ptMinTrackSize = {app->scale(740), app->tabs ? app->window_height() : app->scale(420)};
+            if (app->tabs)
+                limits->ptMaxTrackSize.y = limits->ptMinTrackSize.y;
             return 0;
+        }
+        case WM_MEASUREITEM: {
+            auto* item = reinterpret_cast<MEASUREITEMSTRUCT*>(lparam);
+            if (item->CtlID == static_cast<UINT>(ControlId::controller_choice)) {
+                item->itemHeight = app->scale(24);
+                return TRUE;
+            }
+            break;
+        }
+        case WM_DRAWITEM: {
+            auto* item = reinterpret_cast<DRAWITEMSTRUCT*>(lparam);
+            if (item->CtlID != static_cast<UINT>(ControlId::controller_choice) || item->itemID == UINT(-1))
+                break;
+            const bool available = item->itemID == 0;
+            const bool selected = available && (item->itemState & ODS_SELECTED);
+            FillRect(item->hDC, &item->rcItem, GetSysColorBrush(selected ? COLOR_HIGHLIGHT : COLOR_WINDOW));
+            SetBkMode(item->hDC, TRANSPARENT);
+            SetTextColor(item->hDC, GetSysColor(!available ? COLOR_GRAYTEXT
+                                                : selected ? COLOR_HIGHLIGHTTEXT
+                                                           : COLOR_WINDOWTEXT));
+            wchar_t text[128]{};
+            SendMessageW(item->hwndItem, CB_GETLBTEXT, item->itemID, reinterpret_cast<LPARAM>(text));
+            auto rect = item->rcItem;
+            rect.left += app->scale(4);
+            DrawTextW(item->hDC, text, -1, &rect, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+            if (available && (item->itemState & ODS_FOCUS))
+                DrawFocusRect(item->hDC, &item->rcItem);
+            return TRUE;
         }
         case WM_COMMAND:
             app->command(static_cast<ControlId>(LOWORD(wparam)));
             return 0;
         case WM_NOTIFY:
             if (reinterpret_cast<NMHDR*>(lparam)->idFrom == static_cast<UINT_PTR>(ControlId::tabs) &&
-                reinterpret_cast<NMHDR*>(lparam)->code == TCN_SELCHANGE)
+                reinterpret_cast<NMHDR*>(lparam)->code == TCN_SELCHANGE) {
+                app->fit_page();
                 app->layout();
-            return 0;
-        case WM_VSCROLL: {
-            SCROLLINFO info{};
-            info.cbSize = sizeof(info);
-            info.fMask = SIF_ALL;
-            GetScrollInfo(window, SB_VERT, &info);
-            int next = info.nPos;
-            switch (LOWORD(wparam)) {
-            case SB_LINEUP:
-                next -= 24;
-                break;
-            case SB_LINEDOWN:
-                next += 24;
-                break;
-            case SB_PAGEUP:
-                next -= info.nPage;
-                break;
-            case SB_PAGEDOWN:
-                next += info.nPage;
-                break;
-            case SB_THUMBTRACK:
-                next = info.nTrackPos;
-                break;
+                app->refresh();
             }
-            app->scroll = std::max(0, std::min(next, info.nMax - static_cast<int>(info.nPage) + 1));
-            app->layout();
-            InvalidateRect(window, nullptr, TRUE);
-            return 0;
-        }
-        case WM_MOUSEWHEEL:
-            SendMessageW(window, WM_VSCROLL, GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? SB_LINEUP : SB_LINEDOWN, 0);
             return 0;
         case WM_HSCROLL:
             app->dirty = true;
@@ -150,7 +151,8 @@ LRESULT CALLBACK Window::window_proc(HWND window, UINT message, WPARAM wparam, L
         case WM_CTLCOLORSTATIC:
         case WM_CTLCOLORBTN: {
             HDC dc = reinterpret_cast<HDC>(wparam);
-            SetTextColor(dc, RGB(34, 49, 65));
+            const bool overall = reinterpret_cast<HWND>(lparam) == app->control(ControlId::overall_status);
+            SetTextColor(dc, overall ? (app->active ? RGB(25, 120, 52) : RGB(180, 38, 38)) : RGB(34, 49, 65));
             SetBkColor(dc, RGB(246, 248, 251));
             return reinterpret_cast<LRESULT>(app->background);
         }
@@ -180,7 +182,7 @@ LRESULT CALLBACK Window::window_proc(HWND window, UINT message, WPARAM wparam, L
         error_file << text;
         PostQuitMessage(1);
 #else
-        MessageBoxW(window, wide.c_str(), L"Witness VR", MB_OK | MB_ICONERROR);
+        MessageBoxW(window, wide.c_str(), L"The Witness VR", MB_OK | MB_ICONERROR);
 #endif
         if (message == WM_CREATE)
             return -1;

@@ -51,8 +51,9 @@ void Backend::publish() {
     PostMessageW(window_, status_message, 0, 0);
 }
 
-void Backend::announce(const std::wstring& message) {
+void Backend::announce(const std::wstring& message, bool failure) {
     current_.message = message;
+    current_.error = failure;
     if (!current_.settings.logging)
         return;
     std::error_code error;
@@ -121,6 +122,10 @@ void Backend::run() {
             request.swap(request_);
         }
         current_.busy = true;
+        if (request) {
+            current_.message.clear();
+            current_.error = false;
+        }
         publish();
         try {
             const bool selection =
@@ -137,7 +142,8 @@ void Backend::run() {
                     attach();
                 else if (GetTickCount64() >= pending_until_) {
                     current_.pending = false;
-                    announce(L"VR startup timed out. Check SteamVR; close a non-VR game before relaunching.");
+                    announce(L"VR startup timed out. Check SteamVR; close a non-VR game before relaunching.",
+                             true);
                 }
             }
         } catch (const std::exception& error) {
@@ -157,8 +163,8 @@ void Backend::run() {
                 current_.input.state = L"Status unavailable";
                 current_.input.enabled = false;
             }
-            if (current_.message != message)
-                announce(message);
+            if (!current_.error || current_.message != message)
+                announce(message, true);
         }
         current_.busy = false;
         publish();

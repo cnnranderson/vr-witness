@@ -65,7 +65,7 @@ try {
         $patterns = @{
             Launcher = '^launcher_backend$'
             Math = '^controller_math$'
-            Input = '^(controller_math|controller_injection_smoke|stick_cursor_smoke)$'
+            Input = '^(controller_math|resting_height_hook|controller_injection_smoke|stick_cursor_smoke)$'
             Snap = '^(controller_math|snap_turn_smoke)$'
             Render = '^render_injection_smoke$'
             Lifecycle = '^(cursor_session_smoke|controller_session_smoke)$'

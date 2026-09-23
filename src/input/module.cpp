@@ -1,5 +1,6 @@
 #include "common/protocol.hpp"
 #include "common/session_log.hpp"
+#include "common/fixes_toggle.hpp"
 #include "game/build_validation.hpp"
 #include "common/config_path.hpp"
 #include "common/win_util.hpp"
@@ -10,6 +11,7 @@
 #include "input/settings.hpp"
 #include "input/controller_buttons.hpp"
 #include "input/menu_navigation.hpp"
+#include "input/resting_height.hpp"
 #include "common/caller_address.hpp"
 #include <MinHook.h>
 #include <bcrypt.h>
@@ -81,7 +83,7 @@ std::atomic<bool> session_stop{false};
 SRWLOCK control_lock = SRWLOCK_INIT;
 bool session_logging{};
 HANDLE session_thread{};
-std::atomic<bool> busy{false}, enabled{false}, allow_move{false}, legacy_axis{false}, emergency{false};
+std::atomic<bool> busy{false}, enabled{false}, allow_move{false}, legacy_axis{false};
 std::atomic<unsigned> active{0};
 std::atomic<ULONGLONG> deadline{0};
 std::atomic<std::uint64_t> polls{0}, movement_calls{0}, applied{0};
@@ -93,6 +95,12 @@ AimSettings aim_settings;
 std::atomic<std::uint32_t> stick_speed_percent{default_stick_speed_percent};
 std::atomic<std::uint32_t> motion_speed_percent{60};
 std::filesystem::path input_settings_file;
+using EyePosition = Vec3* (*)(Vec3*, void*);
+using GetHeightFrame = HeightFrame (*)();
+EyePosition original_eye{};
+void* eye_site{};
+GetHeightFrame fixture_height{};
+RestingHeight resting_height;
 
 bool refresh_input_settings() {
     const auto read_speed = [&](const wchar_t* key, std::atomic<std::uint32_t>& setting) {
@@ -178,6 +186,57 @@ Context context() {
     c.menu = std::isfinite(c.fade) && c.fade >= 1.f && global<unsigned char>(0x61E99C) == 0 &&
              global<int>(0x630010) >= 4 && global<std::uintptr_t>(0x6300E0) != 0;
     return c;
+}
+
+HeightFrame height_frame() {
+    if (fixture_height)
+        return fixture_height();
+    HeightFrame frame;
+    const auto renderer = global<std::uintptr_t>(0x469A5B0);
+    unsigned char native{};
+    if (!renderer || !read(renderer + 0x25, native) || !native)
+        return frame;
+    frame.native_vr = true;
+    const auto id = global<int>(0x630470);
+    const auto table = global<std::uintptr_t>(0x62D0A0);
+    int first{}, count{};
+    std::uintptr_t entries{};
+    if (!id || !table || !read(table + 8, first) || !read(table + 0x10, count) ||
+        !read(table + 0x18, entries) || !entries)
+        return frame;
+    const auto index = std::int64_t(id) - first;
+    if (index < 0 || index >= count || !read(entries + index * sizeof(void*), frame.player))
+        return frame;
+    const auto c = context();
+    frame.can_calibrate = c.focused && c.tracking && !c.suppressed && c.mode == 2 && std::isfinite(c.fade) &&
+                          c.fade <= 0 && !c.menu;
+    float base_height{}, adjustment{};
+    if (!read(game_base + 0x630528, frame.tracked_height) || !read(game_base + 0x630434, base_height) ||
+        !read(game_base + 0x62D168, adjustment))
+        frame.can_calibrate = false;
+    frame.standing_height = base_height + adjustment;
+    frame.key_down = (GetAsyncKeyState(VK_F7) & 0x8000) != 0;
+    frame.reset = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    return frame;
+}
+
+Vec3* hooked_eye(Vec3* output, void* entity) {
+    Active in;
+    auto* result = original_eye(output, entity);
+    if (!result || !enabled.load() || !allow_move.load() || GetTickCount64() >= deadline.load())
+        return result;
+    auto frame = height_frame();
+    Lock lock;
+    if (!frame.native_vr || !frame.player || !finite(*result)) {
+        resting_height.disarm();
+        return result;
+    }
+    if (!fixture_height)
+        frame.can_calibrate = frame.can_calibrate && latest.allowed &&
+                              latest.thread == GetCurrentThreadId() && GetTickCount64() - latest.tick <= 100;
+    if (entity == frame.player && enabled.load() && allow_move.load())
+        result->z += resting_height.update(frame);
+    return result;
 }
 
 void* current_system() {
@@ -270,15 +329,13 @@ void hooked_poll() {
             }
         }
     }
-    if (!fixture_context && s.context.focused && (GetAsyncKeyState(VK_F9) & 0x8000))
-        emergency.store(true);
     bool request_back = false, request_menu = false;
     MenuDirection navigation{};
-    s.allowed =
-        live_system && walking(s.context) && !s.captured && !emergency.load() && s.tick < deadline.load();
+    s.allowed = live_system && walking(s.context) && !s.captured && s.tick < deadline.load();
     {
         Lock lock;
         if (latest.thread != s.thread || s.tick - latest.tick > 100) {
+            resting_height.disarm();
             puzzle_back.reset();
             menu_button.reset();
             menu_left.reset();
@@ -290,8 +347,7 @@ void hooked_poll() {
             snap_turn.reset();
         }
         // Reset cursor latches here too: menus can skip the cursor callback.
-        if (!puzzle(s.context) || s.captured || !s.pose_valid || !s.hands[1].valid || !allow_aim.load() ||
-            emergency.load()) {
+        if (!puzzle(s.context) || s.captured || !s.pose_valid || !s.hands[1].valid || !allow_aim.load()) {
             pointing.reset();
             stick_cursor.reset();
             calibration.disarm();
@@ -300,27 +356,27 @@ void hooked_poll() {
             s.hands[1],
             live_system &&
                 (puzzle(s.context) || (s.context.menu && s.context.focused && s.context.tracking)) &&
-                !s.captured && allow_aim.load() && !emergency.load() && s.tick < deadline.load() &&
-                polled_keyboard);
+                !s.captured && allow_aim.load() && s.tick < deadline.load() && polled_keyboard);
         // The pause toggle remains available inside menus, with focus/tracking gates.
-        request_menu =
-            menu_button.update(s.hands[0], live_system && s.context.focused && s.context.tracking &&
-                                               !s.captured && allow_aim.load() && !emergency.load() &&
-                                               s.tick < deadline.load() && polled_keyboard);
+        request_menu = menu_button.update(
+            s.hands[0], live_system && s.context.focused && s.context.tracking && !s.captured &&
+                            allow_aim.load() && s.tick < deadline.load() && polled_keyboard);
         const bool menu_allowed = live_system && s.context.menu && s.context.focused && s.context.tracking &&
-                                  !s.captured && allow_aim.load() && !emergency.load() &&
-                                  s.tick < deadline.load() && polled_keyboard;
+                                  !s.captured && allow_aim.load() && s.tick < deadline.load() &&
+                                  polled_keyboard;
         const auto left = menu_left.update(s.hands[0], menu_allowed, s.tick);
         const auto right = menu_right.update(s.hands[1], menu_allowed, s.tick);
         navigation = left != MenuDirection::none ? left : right;
         s.snap_direction = snap_turn.update(s.hands[1], s.allowed && allow_snap.load(), s.tick);
         s.allowed = s.allowed && allow_move.load();
+        if (!s.allowed)
+            resting_height.disarm();
         s.movement = movement.update(s.hands[0], s.allowed);
         latest = s;
     }
     ++polls;
     if (navigation != MenuDirection::none && !request_menu && !request_back && enabled.load() &&
-        allow_aim.load() && !emergency.load() && GetTickCount64() < deadline.load()) {
+        allow_aim.load() && GetTickCount64() < deadline.load()) {
         const auto c = context();
         if (c.menu && c.focused && c.tracking) {
             // Queue a complete native press/release pair; no held key can outlive this callback.
@@ -329,14 +385,12 @@ void hooked_poll() {
             original_key(polled_keyboard, key, false);
         }
     }
-    if (request_menu && enabled.load() && allow_aim.load() && !emergency.load() &&
-        GetTickCount64() < deadline.load()) {
+    if (request_menu && enabled.load() && allow_aim.load() && GetTickCount64() < deadline.load()) {
         const auto c = context();
         if (c.focused && c.tracking)
             original_key(polled_keyboard, 0x13d, true);
     }
-    if (request_back && enabled.load() && allow_aim.load() && !emergency.load() &&
-        GetTickCount64() < deadline.load()) {
+    if (request_back && enabled.load() && allow_aim.load() && GetTickCount64() < deadline.load()) {
         const auto c = context();
         if (!(puzzle(c) || (c.menu && c.focused && c.tracking)))
             return;
@@ -351,8 +405,7 @@ Vec3* hooked_move(Vec3* output) {
     Active guard;
     auto* result = original_move(output);
     ++movement_calls;
-    if (!enabled.load() || !allow_move.load() || emergency.load() || caller != move_caller ||
-        result != output || !result)
+    if (!enabled.load() || !allow_move.load() || caller != move_caller || result != output || !result)
         return result;
     const auto now = GetTickCount64();
     Lock lock;
@@ -379,7 +432,7 @@ Axis* hooked_cursor(Axis* output, bool native_mode) {
     const auto now = GetTickCount64();
     const auto c = context();
     const auto f = aim_frame();
-    const bool allowed = enabled.load() && allow_aim.load() && !emergency.load() && now < deadline.load() &&
+    const bool allowed = enabled.load() && allow_aim.load() && now < deadline.load() &&
                          latest.thread == GetCurrentThreadId() && now - latest.tick <= 50 && puzzle(c) &&
                          puzzle(latest.context) && !latest.captured && latest.hands[1].valid &&
                          latest.pose_valid;
@@ -392,10 +445,9 @@ Axis* hooked_cursor(Axis* output, bool native_mode) {
         pointing.reset();
         ++recenter_count;
     }
-    const bool manual_allowed = enabled.load() && allow_aim.load() && !emergency.load() &&
-                                now < deadline.load() && latest.thread == GetCurrentThreadId() &&
-                                now - latest.tick <= 50 && puzzle(c) && puzzle(latest.context) &&
-                                !latest.captured && f.valid;
+    const bool manual_allowed = enabled.load() && allow_aim.load() && now < deadline.load() &&
+                                latest.thread == GetCurrentThreadId() && now - latest.tick <= 50 &&
+                                puzzle(c) && puzzle(latest.context) && !latest.captured && f.valid;
     const bool manual = stick_cursor.update(latest.hands[1], manual_allowed, recentered, now, f.bounds.x,
                                             stick_speed_percent.load() / 100.f, delta);
     latest.stick_active = manual;
@@ -430,7 +482,7 @@ void hooked_key(void* keyboard, int key, bool pressed) {
     if (within_native_poll && caller == key_caller && key == 0x136)
         polled_keyboard = keyboard;
     if (caller == key_caller && key == 0x136 && pressed && enabled.load() && allow_aim.load() &&
-        !emergency.load() && GetTickCount64() < deadline.load()) {
+        GetTickCount64() < deadline.load()) {
         const auto c = context();
         Lock lock;
         // Suppress only the legacy VR pad-cancel route that also fires on stick deflection.
@@ -443,7 +495,7 @@ void hooked_key(void* keyboard, int key, bool pressed) {
     }
     // Consume only the verified native controller menu route; left B supplies its edge.
     if (within_native_poll && caller == menu_caller && key == 0x13d && enabled.load() && allow_aim.load() &&
-        !emergency.load() && GetTickCount64() < deadline.load())
+        GetTickCount64() < deadline.load())
         pressed = false;
     original_key(keyboard, key, pressed);
 }
@@ -461,9 +513,9 @@ void hooked_vr_update() {
         const bool vr_active =
             fixture_context || (renderer && read(renderer + 0x25, native_vr) && native_vr == 1);
         ++turn_route_calls;
-        const bool ready = enabled.load() && !emergency.load() && now < deadline.load() &&
-                           latest.thread == GetCurrentThreadId() && now - latest.tick <= 50 && walking(c) &&
-                           walking(latest.context) && !latest.captured && latest.hands[1].valid && vr_active;
+        const bool ready = enabled.load() && now < deadline.load() && latest.thread == GetCurrentThreadId() &&
+                           now - latest.tick <= 50 && walking(c) && walking(latest.context) &&
+                           !latest.captured && latest.hands[1].valid && vr_active;
         latest.turn_ready = ready;
         const bool allowed = ready && allow_snap.load();
         const int direction = latest.snap_direction;
@@ -506,6 +558,11 @@ void validate() {
     if (witness::same_path(exe, own / L"witness-input-test-host.exe")) {
         input_settings_file =
             own / (L"input-settings-test-" + std::to_wstring(GetCurrentProcessId()) + L".ini");
+        eye_site = reinterpret_cast<void*>(GetProcAddress(main, "TestInputEye"));
+        fixture_height = reinterpret_cast<GetHeightFrame>(
+            reinterpret_cast<void*>(GetProcAddress(main, "TestInputHeightFrame")));
+        if (!eye_site || !fixture_height)
+            throw std::runtime_error("Height fixture exports missing");
         poll_site = reinterpret_cast<void*>(GetProcAddress(main, "TestInputPoll"));
         move_site = reinterpret_cast<void*>(GetProcAddress(main, "TestInputMove"));
         fixture_context =
@@ -549,6 +606,14 @@ void validate() {
                 correct_size = true;
         if (!correct_size)
             throw std::runtime_error("Unsupported image size");
+        match(game_base, 0x240FD0, "48895c2408574883ec40488b05cf9545040f57c9488bfa80782500488bd90f28d17471");
+        match(game_base, 0x240FF8, "f30f100528f53e00");
+        match(
+            game_base, 0x241064,
+            "f30f1005c8f33e00f30f5805f4c03e00f30f584f24f30f585728f30f58472c488bc3f30f110bf30f115304f30f114308488b5c24504883c4405fc3");
+        match(game_base, 0x241140,
+              "8b052af33e00488b1553bf3e0085c0750333c0c32b420878f83b42107df34863c8488b4218488b04c8c3");
+        eye_site = reinterpret_cast<void*>(game_base + 0x240FD0);
         match(game_base, 0x242230, "48895c24184889742420574881ec80000000488b05177e4504");
         match(game_base, 0x24226e, "488b053b834504488bd9403870210f842e03");
         match(
@@ -650,6 +715,7 @@ void validate() {
 
 void set_controls(bool value) {
     Lock lock;
+    resting_height.disarm();
     puzzle_back.reset();
     menu_button.reset();
     menu_left.reset();
@@ -694,6 +760,8 @@ void prepare(bool moving, bool legacy, ULONGLONG until, bool aiming = false, boo
                               reinterpret_cast<void**>(&original_poll)));
         require(MH_CreateHook(move_site, reinterpret_cast<void*>(&hooked_move),
                               reinterpret_cast<void**>(&original_move)));
+        require(MH_CreateHook(eye_site, reinterpret_cast<void*>(&hooked_eye),
+                              reinterpret_cast<void**>(&original_eye)));
         created = true;
     }
     if (aim_capture.load() && !original_cursor)
@@ -708,6 +776,7 @@ void prepare(bool moving, bool legacy, ULONGLONG until, bool aiming = false, boo
     {
         Lock lock;
         latest = {};
+        resting_height.disarm();
         puzzle_back.reset();
         menu_button.reset();
         menu_left.reset();
@@ -732,13 +801,13 @@ void prepare(bool moving, bool legacy, ULONGLONG until, bool aiming = false, boo
     polls = 0;
     movement_calls = 0;
     applied = 0;
-    emergency = false;
     allow_move = moving;
     legacy_axis = legacy;
     deadline = until;
     // Originals are ready before either detour can execute.
     require(MH_EnableHook(poll_site));
     require(MH_EnableHook(move_site));
+    require(MH_EnableHook(eye_site));
     if (aim_capture.load()) {
         require(MH_EnableHook(cursor_site));
         require(MH_EnableHook(key_site));
@@ -758,6 +827,11 @@ void stop() {
     set_controls(false);
     if (!created)
         return;
+    if (original_eye) {
+        const auto r = MH_DisableHook(eye_site);
+        if (r != MH_OK && r != MH_ERROR_DISABLED)
+            require(r);
+    }
     if (original_key) {
         const auto r = MH_DisableHook(key_site);
         if (r != MH_OK && r != MH_ERROR_DISABLED)
@@ -912,27 +986,18 @@ DWORD observe_session(const witness::ProbeRequest& req) {
 
 DWORD WINAPI session_worker(void* argument) noexcept {
     std::unique_ptr<std::ofstream> log(static_cast<std::ofstream*>(argument));
-    bool focused = false, f7_down = true, f9_down = true, previous_enabled = allow_move.load();
+    bool previous_enabled = allow_move.load();
     auto heartbeat = GetTickCount64(), settings_check = heartbeat;
     try {
-        while (!session_stop.load() && !emergency.load()) {
+        witness::FixesToggle fixes;
+        while (!session_stop.load()) {
             if (GetTickCount64() - settings_check >= 1000) {
                 if (refresh_input_settings())
                     session_record(*log, "input.settings.changed");
                 settings_check = GetTickCount64();
             }
-            const bool now_focused = foreground();
-            const bool f7 = (GetAsyncKeyState(VK_F7) & 0x8000) != 0,
-                       f9 = (GetAsyncKeyState(VK_F9) & 0x8000) != 0;
-            if (now_focused && focused) {
-                if (f7 && !f7_down)
-                    set_controls(!allow_move.load());
-                if (f9 && !f9_down)
-                    session_stop = true;
-            }
-            focused = now_focused;
-            f7_down = f7;
-            f9_down = f9;
+            if (const auto next = fixes.consume())
+                set_controls(*next);
             if (previous_enabled != allow_move.load()) {
                 session_record(*log, "input.session.changed");
                 previous_enabled = allow_move.load();
@@ -1007,7 +1072,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessProbeRun(void* argument) no
             << ",\"aim_capture\":" << aim_capture.load() << ",\"snap_enabled\":" << allow_snap.load()
             << ",\"snap_capture\":" << snap_capture.load() << ",\"snap_steps\":" << snap_steps.load()
             << ",\"aim_model\":\"angular_pointing\",\"walking_mode\":2,\"deadzone\":0.2,\"interface\":\"IVRSystem_012\"}\n";
-        while (GetTickCount64() < deadline.load() && !emergency.load()) {
+        while (GetTickCount64() < deadline.load()) {
             emit(log);
             if (!log)
                 throw std::runtime_error("Input log write failed");
@@ -1023,7 +1088,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessProbeRun(void* argument) no
             << ",\"puzzle_back_presses\":" << back_presses.load()
             << ",\"cancel_suppressed\":" << cancel_suppressed.load()
             << ",\"recenter_count\":" << recenter_count.load() << ",\"turn_calls\":" << turn_calls.load()
-            << ",\"turn_applied\":" << turn_applied.load() << ",\"emergency\":" << emergency.load() << "}\n";
+            << ",\"turn_applied\":" << turn_applied.load() << "}\n";
         log.flush();
         return log ? 0 : 4;
     } catch (const std::exception& e) {
@@ -1044,8 +1109,10 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessInputSessionControl(void* a
     if (!argument)
         return 1;
     auto& response = *static_cast<InputSessionRequest*>(argument);
+    if (response.size != sizeof(response) || response.version != kInputProtocolVersion)
+        return 1;
     const auto request = response;
-    if (request.size != sizeof(request) || request.version != kInputProtocolVersion ||
+    if (request.height_calibrated || request.height_m != 0 || request.height_offset_m != 0 ||
         request.command < SessionCommand::start || request.command > SessionCommand::status ||
         request.legacy_axis0 > 1 || request.pointing > 1 || request.aim_speed_percent < 10 ||
         request.aim_speed_percent > 300 || request.aim_smoothing_ms > 250 || request.stick_speed_percent ||
@@ -1094,8 +1161,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessInputSessionControl(void* a
             if (session_thread && WaitForSingleObject(session_thread, 10000) != WAIT_OBJECT_0)
                 throw std::runtime_error("Input worker did not stop; restart game");
         } else if (request.command == SessionCommand::enable || request.command == SessionCommand::disable) {
-            if (session_state.load() != SessionState::running || session_stop.load() || emergency.load() ||
-                poisoned.load())
+            if (session_state.load() != SessionState::running || session_stop.load() || poisoned.load())
                 throw std::runtime_error("Input session is inactive/failed");
             set_controls(request.command == SessionCommand::enable);
         }
@@ -1134,6 +1200,9 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessInputSessionControl(void* a
     response.recenter_count = recenter_count.load();
     {
         Lock lock;
+        response.height_calibrated = resting_height.calibrated();
+        response.height_m = resting_height.height();
+        response.height_offset_m = resting_height.offset();
         response.aim_speed_percent = motion_speed_percent.load();
         response.aim_smoothing_ms = aim_settings.smoothing_ms;
     }

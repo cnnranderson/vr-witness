@@ -433,6 +433,8 @@ int input_session_control(const Options& config, HANDLE process, const std::file
               << ",\"snap_angle\":" << request.snap_steps * 22.5
               << ",\"snap_enabled\":" << ((request.enabled && request.snap_steps) ? "true" : "false")
               << ",\"turn_calls\":" << request.turn_calls << ",\"turn_applied\":" << request.turn_applied
+              << ",\"height_calibrated\":" << (request.height_calibrated ? "true" : "false")
+              << ",\"height_m\":" << request.height_m << ",\"height_offset_m\":" << request.height_offset_m
               << "}\n";
     if (result)
         throw std::runtime_error("Input session command failed; inspect status/log");

@@ -6,18 +6,20 @@
 namespace witness::launcher {
 namespace fs = std::filesystem;
 
+enum class ControllerType { knuckles, xbox360, steam_frame };
+
 struct Settings {
     int stick_speed{20};  // Percent of view width per second.
     int motion_speed{60}; // Percent of view width per second.
     int smoothing_ms{80};
     int snap_steps{1}; // 0 disables snapping; 1/2/4 select 22.5/45/90 degrees.
-    bool legacy_axis{true};
+    ControllerType controller{ControllerType::knuckles};
     bool logging{false};
     bool operator==(const Settings& other) const;
 };
 
 struct Session {
-    std::wstring state{L"Not attached"};
+    std::wstring state{L"stopped"};
     bool loaded{};
     bool enabled{};
     bool fault{};
@@ -26,6 +28,10 @@ struct Session {
     int smoothing_ms{};
     int snap_steps{};
     bool legacy_axis{};
+    bool height_calibrated{};
+    float height_m{}, height_offset_m{};
+
+    bool active() const { return loaded && enabled && !fault && state == L"running"; }
 };
 
 struct Snapshot {
@@ -39,9 +45,15 @@ struct Snapshot {
     bool uncertain{}; // Remote command outcome is unknown; require game restart.
     Session render;
     Session input;
-    std::wstring message{L"Choose your game folder, then select Launch VR."};
+
+    bool active() const { return !uncertain && render.active() && input.active(); }
+
+    bool attached() const { return render.state == L"running" || input.state == L"running"; }
+
+    bool error{};
+    std::wstring message; // Debug log text; only errors are shown in a dialog.
 };
-enum class Action { launch, attach, stop, apply, select_game, detect_game, cancel };
+enum class Action { launch, toggle_attachment, apply, select_game, detect_game, cancel };
 
 struct Request {
     Action action;

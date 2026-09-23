@@ -1,28 +1,24 @@
-# Witness VR
+# The Witness VR
 
-A Windows x64 mod for The Witness's native VR mode. It repairs headset cursor
-and pause rendering, and adds tracked-controller movement, pointing, puzzle
-input, snap turning, and menu navigation.
+A portable Windows mod for The Witness's native VR mode. Fixes headset cursor
+and pause rendering, and adds controller movement, pointing, puzzle input,
+snap turning, and menu navigation.
 
-## Getting started
+## Quick start
 
-Download the portable ZIP from [Releases](https://github.com/cnnranderson/vr-witness/releases).
 Requires Windows 10/11 x64, Steam, SteamVR, a PC VR headset, and the supported
-Steam Windows version of The Witness. Knuckles controllers are the tested configuration.
+Steam Windows build of The Witness. Knuckles controllers are supported.
 
-1. Extract the complete ZIP to a writable folder.
-2. Connect the headset and turn on both controllers.
-3. Run `WitnessVR.exe`. Check the detected game location, or use **Browse**.
+1. Download and extract the complete ZIP from [Releases](https://github.com/cnnranderson/vr-witness/releases).
+2. Connect the headset and both controllers.
+3. Run `WitnessVR.exe`. Check the detected installation, or select **Browse**.
 4. Select **Launch VR** and keep the headset awake.
-5. Wait for **Headset visuals** and **Controller input** to show **Attached and active**.
+5. Wait for both session indicators to show **Active**.
 
-No installer, administrator access, Python, or build tools are needed.
-The launcher reads Steam libraries to find the game and does not modify the
-game installation. **Attach** supports a game already started with `-vr`.
-
-Closing the launcher leaves the game and fixes running. **Stop fixes** stops
-the mod sessions. Close the game before moving, updating, or deleting the mod
-folder; its DLLs stay loaded until the game exits.
+No installer, administrator access, or build tools are required. The game
+installation stays unchanged. **Attach to Game** also supports a game started
+with `-vr`. **Detach from game** stops the fixes; closing the launcher leaves
+them running. Close the game and launcher before updating the mod.
 
 ## Controls
 
@@ -31,56 +27,62 @@ folder; its DLLs stay loaded until the game exits.
 | Left stick | Walk |
 | Right stick | Snap turn while walking; move the puzzle cursor |
 | Right trigger | Activate, click, and draw |
-| Right A | Recenter and return from stick cursor to pointing; release the trigger first |
-| Left B | Open or close the pause/settings menu |
-| Right B | Cancel a puzzle line, leave the puzzle, or go back in menus |
+| Right A | Recenter pointing and switch from stick cursor to pointing |
+| Left B | Toggle the pause/settings menu |
+| Right B | Cancel a line, leave a puzzle, or go back in menus |
 | Either stick in menus | Up/down selects; left/right adjusts; hold to repeat |
-| F7 / F8 / F9 | Toggle controls / toggle visuals / stop both fixes |
+| F7 | Calibrate height while walking |
+| Shift+F7 | Restore the game default height |
+| F8 | Toggle both fixes while attached |
 
-Keep the game focused. Center the sticks and release buttons after enabling
-controls or returning from a menu. Canceling a line and leaving its panel can
-require separate B presses. Legacy Knuckles bindings may alias trackpad and stick input.
+Keep the game focused. Center sticks and release buttons after resuming controls.
+Release the trigger before recentering. Canceling a line and leaving a panel
+may require separate B presses.
 
 ## Settings
 
-Use the launcher's **Settings** tab and select **Save settings**.
+Change values in **Settings**, then select **Save settings**.
 
-| Setting | Default | Range |
+| Setting | Default | Options |
 | --- | --- | --- |
-| Stick cursor speed | 20% | 10-300% of view width per second |
-| Pointing cursor speed | 60% | 10-300% of view width per second |
+| Analog stick cursor speed | 20% | 10-300% of view width per second |
+| Controller pointing speed | 60% | 10-300% of view width per second |
 | Pointing smoothing | 80 ms | 0-250 ms |
-| Snap turning | 22.5 degrees | Off, 22.5, 45, or 90 degrees |
-| Knuckles legacy compatibility | On | On/off |
-| Diagnostic logging | Off | On/off; 2 MiB limit per file |
+| Snap turning | 22.5 degrees | Off, 22.5, 45, 90 degrees |
+| Controller type | Knuckles | Xbox 360 and Steam Frame unavailable |
+| Debug logging | Off | 2 MiB limit per file |
 
-Speeds update live within about one second. Other changes restart the affected
-sessions and preserve their enabled/disabled state. Settings live in `config`
-beside the launcher. For troubleshooting, enable logging, reproduce the issue,
-and use **Open logs**. Review local paths before sharing logs.
+Speeds update within about one second. Other changes briefly restart affected
+fixes. Settings are stored in `config` beside the launcher.
 
-## Compatibility and limitations
+Each game launch starts at its native default height. With the game focused,
+outside puzzles and menus, press **F7** to set your current posture to the game's
+standing eye height. Leaning and crouching remain tracked. **Shift+F7** removes
+the adjustment. **Configured height** shows the target and signed offset in
+meters, or **Game default**. Calibration is not saved between game launches.
 
-The mod accepts one verified game executable and checks live code before
-installing hooks. Other releases or modified executables may be rejected.
-The supported fingerprint is documented in [native integration](docs/native-integration.md).
+## Status and troubleshooting
 
-Headset testing has confirmed stereo/6DOF, cursor and pause repair, walking,
-pointing, drawing, recentering, and snap turning on the development setup.
-The B-button layout and menu navigation have automated fixture coverage;
-their headset validation is still pending. Other PCs, controller profiles,
-Steam Frame, and extended play sessions need broader testing.
+Sessions shows each component's state. Inactive DLLs remain loaded until the
+game exits. Errors appear in dialogs. For diagnostics, enable **Debug logging**,
+reproduce the issue, then select **Open logs**.
 
-Hand-position parallax and fixed-view/mono puzzle presentation are not
-implemented. The portable build is unsigned.
+If VR is not ready, check SteamVR and wake the headset. Restart a non-VR game
+through **Launch VR**. Close the game before switching mod builds.
+
+## Limitations
+
+- Only one [verified executable](docs/native-integration.md) is supported.
+- Menu navigation and height adjustment still need headset validation.
+- Excessive forward movement when entering some puzzles remains unresolved.
+- Hand-position parallax and fixed-view/mono puzzle modes are not implemented.
+- Steam Frame, other controller profiles, and extended play need broader testing.
+- The portable executable is unsigned.
 
 ## Development
 
-The source is organized by responsibility under `src`: `launcher`, `loader`,
-`input`, `render`, `game`, `common`, and `diagnostics`.
-
-- [Development](docs/development.md): build, test, formatting, and diagnostic commands.
-- [Architecture](docs/architecture.md): module boundaries, protocols, threading, and lifetime.
-- [Native integration](docs/native-integration.md): supported build, OpenVR ABI, and guarded native routes.
-- [Design](docs/design.md): tracking, presentation, and planned puzzle modes.
-- [Releases](docs/releases.md): local packaging and GitHub publication.
+- [Build and test](docs/development.md)
+- [Architecture and protocols](docs/architecture.md)
+- [Native integration](docs/native-integration.md)
+- [VR presentation design](docs/design.md)
+- [Packaging and releases](docs/releases.md)

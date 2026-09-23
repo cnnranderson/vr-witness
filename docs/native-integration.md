@@ -64,3 +64,31 @@ Owned-process tests exercise both hands in all four directions, B hold/rearm,
 pause/resume events, unrelated key callers, and complete directional releases.
 Math checks cover the repeat interval, dominant axis, device changes and
 context rearming. These checks do not establish headset usability.
+
+## Resting height
+
+The eye-position helper at RVA 240FD0 returns a Vec3 pointer using the x64 ABI:
+output in RCX, entity in RDX. In VR it adds native tracked Z at 630528 to entity
+Z at +2C. Its non-VR branch instead adds 630434 + 62D168, which supplies the
+standing-height reference. Native conversion 37A090 reads pose translation
+through 2E45A0 and changes axes/signs without scaling; OpenVR Y becomes native Z.
+The update at 23E540 rotates around Z and retains its units.
+[OpenVR matrices use meters](https://github.com/ValveSoftware/openvr/blob/master/headers/openvr_driver.h).
+
+The detour calls the original first, then adds a fixed Z offset only when the
+entity matches the current player. Player lookup mirrors 241140: ID 630470
+indexes the entity table at 62D0A0, using first ID +8, count +10 and entries +18.
+The helper's prologue, height references, final stores and lookup instructions
+are verified against live bytes after fingerprint validation. Camera callers
+247A25 and 248065 copy its result into the native eye/camera position globals.
+
+Each game process starts with zero adjustment, ignoring the retired RestingHeight
+setting. A fresh F7 press on an eligible walking frame captures the signed
+standing-minus-tracked offset; invalid data rejects that press. Shift+F7 clears
+it. Menus, puzzle entry and later head motion do not recalibrate. Only returned
+eye coordinates change, never player position or tracking storage. Stopping
+restores the native route and keeps the trampoline pinned. Calibration survives
+restarting the input session in the same process. Owned-process checks cover
+original forwarding, entity filtering, held keys, retained leaning, status
+reporting, mode changes, F8 consumption, disabling and teardown; real-game height
+and puzzle alignment remain to verify.

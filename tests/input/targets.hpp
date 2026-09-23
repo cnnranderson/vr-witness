@@ -1,6 +1,12 @@
 #pragma once
 #include "input/controller_input.hpp"
 #include "input/puzzle_aim.hpp"
+#include "input/resting_height.hpp"
+extern witness::input::HeightFrame fixture_height;
+extern int fixture_player;
+extern unsigned native_eye_calls;
+extern "C" witness::input::Vec3* TestInputEye(witness::input::Vec3*, void*);
+int check_height_hook();
 extern unsigned input_frame;
 extern unsigned native_polls;
 extern "C" void TestInputPoll();

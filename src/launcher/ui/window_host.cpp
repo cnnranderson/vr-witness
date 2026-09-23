@@ -32,11 +32,13 @@ int Window::run(HINSTANCE instance, int show) {
     RECT work{};
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
     window = CreateWindowExW(
-        0, cls.lpszClassName, L"Witness VR", WS_OVERLAPPEDWINDOW | WS_VSCROLL, initial_position,
-        initial_position, std::min<int>(MulDiv(860, system_dpi, 96), work.right - work.left),
-        std::min<int>(MulDiv(934, system_dpi, 96), work.bottom - work.top), nullptr, nullptr, instance, this);
+        0, cls.lpszClassName, L"The Witness VR", (WS_OVERLAPPEDWINDOW & ~WS_MAXIMIZEBOX) | WS_CLIPCHILDREN,
+        initial_position, initial_position,
+        std::min<int>(MulDiv(800, system_dpi, 96), work.right - work.left),
+        std::min<int>(MulDiv(626, system_dpi, 96), work.bottom - work.top), nullptr, nullptr, instance, this);
     if (!window)
         return 1;
+    fit_page();
     ShowWindow(window, show);
     UpdateWindow(window);
 #ifdef WITNESS_UI_TEST

@@ -31,7 +31,7 @@ private:
     void attach();
     void start_game_if_needed();
     Session control(SessionKind kind, const wchar_t* action);
-    void announce(const std::wstring& message);
+    void announce(const std::wstring& message, bool error = false);
     void publish();
     fs::path root_, log_path_;
     HWND window_{};

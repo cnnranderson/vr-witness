@@ -36,7 +36,7 @@ if ($Aim) { $extra += '--controller-aim' }; if ($AimTrace) { $extra += '--contro
 Write-Output 'An unflagged capture observes an active session without changing it in the new build. Bounded controller test. Movement requires -Move, a detected joystick (or explicit legacy axis), game focus and neutral stick before deflection.'
 if ($Aim) { Write-Output 'Pointing is enabled in puzzle mode. Release the right trigger to arm; rotate the right controller to aim.' }
 if ($Snap) { Write-Output "Snap turning: $SnapAngle degrees, walking only; center the right stick between turns and after menus/puzzles." }
-Write-Output 'F9 ends the test early; it also stops the cursor/pause session if that session is running.'
+Write-Output 'The bounded test ends automatically; use a short Seconds value for interactive checks.'
 & $loader --controller-trace @extra --pid $TargetPid --game-exe (Join-Path $GameDir 'witness64_d3d11.exe') --log $log --duration-ms ($Seconds * 1000)
 if ($LASTEXITCODE -ne 0) { throw "Controller test failed. See $log; restart the game before retrying." }
 Get-Content -LiteralPath $log -Tail 1

@@ -5,10 +5,10 @@
 After [setting up the compiler](development.md), create a new version:
 
 ```powershell
-.\scripts\release.ps1 -Version 0.1.1
+.\scripts\release.ps1 -Version 0.3.0
 ```
 
-The command builds Release in a fresh directory, runs all nine native checks,
+The command builds Release in a fresh directory, runs all native checks,
 verifies source files did not change during the build, and packages only the
 tested binaries. Existing versions are never overwritten. Outputs:
 
@@ -56,12 +56,12 @@ To publish committed changes, choose a new version tag:
 
 ```powershell
 git push origin main
-git tag -a v0.1.1 -m "Witness VR 0.1.1"
-git push origin v0.1.1
+git tag -a v0.3 -m "The Witness VR v0.3"
+git push origin v0.3
 ```
 
 A `v*` tag triggers publication after successful tests. Two-part tags such as
-`v0.1` normalize to package version `0.1.0`. A suffix such as `-preview.1`
+`v0.3` normalize to package version `0.3.0`. A suffix such as `-preview.1`
 creates a prerelease. The Release contains the ZIP and its checksum; build
 records remain in a separate Actions artifact. Existing assets are not overwritten.
 
