@@ -13,6 +13,8 @@ struct Settings {
     int motion_speed{60}; // Percent of view width per second.
     int smoothing_ms{80};
     int snap_steps{1}; // 0 disables snapping; 1/2/4 select 22.5/45/90 degrees.
+    bool smooth_turn{};
+    int smooth_turn_speed{60}; // Degrees per second at full stick deflection.
     ControllerType controller{ControllerType::knuckles};
     bool logging{false};
     bool operator==(const Settings& other) const;
@@ -27,6 +29,7 @@ struct Session {
     int motion_speed{};
     int smoothing_ms{};
     int snap_steps{};
+    int smooth_turn_speed{}; // Zero when smooth turning is disabled.
     bool legacy_axis{};
     bool height_calibrated{};
     float height_m{}, height_offset_m{};

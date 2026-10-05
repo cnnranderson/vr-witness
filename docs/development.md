@@ -25,12 +25,12 @@ binaries requires process exit. Game files and the shipped OpenVR DLL stay uncha
 | Suite | Coverage |
 | --- | --- |
 | Math | Input transformations, smoothing, latches, buttons, and menu repeat |
-| Input | Math, input injection, manual cursor and resting-height routing |
-| Snap | Math and snap-turn routing |
+| Input | Math, input injection, cursor, right trigger, smooth turning and height |
+| Snap | Math, snap and smooth turning routes |
 | Render | Eye submission, pause redraw, and route-fault behavior |
 | Lifecycle | Persistent input/render sessions, stop/start, and callback lifetime |
 | Launcher | Argument quoting, Steam discovery, settings, status parsing, and bounded logs |
-| All | All ten native checks |
+| All | All twelve native checks |
 
 Run the affected suite during iteration and All after a completed cross-feature,
 loader, ABI, or lifetime change. Tests start their own fixture processes; they
@@ -66,7 +66,9 @@ $gameFolder = 'E:\Games\The Witness'
 ```
 
 Both session scripts also support `stop`, `enable`, and `disable`. `-TargetPid`
-selects a process explicitly. Feature flags apply at session start.
+selects a process explicitly. Feature flags apply at session start. Use
+`-Smooth -TurnSpeed 60` instead of `-Snap` for smooth turning; speed is degrees
+per second (30..180). Snap and smooth modes are mutually exclusive.
 
 For a passive controller capture, omit behavior-changing flags:
 

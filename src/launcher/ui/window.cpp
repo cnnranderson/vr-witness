@@ -65,6 +65,9 @@ void Window::command(ControlId id) {
         SendMessageW(controller, CB_SETCURSEL, 0, 0);
         break;
     case ControlId::snap_choice:
+        update_values();
+        dirty = true;
+        break;
     case ControlId::logging:
         dirty = true;
         break;

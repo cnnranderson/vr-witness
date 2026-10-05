@@ -50,8 +50,8 @@ private:
     void command(ControlId id);
 
     HWND window{}, tabs{}, path{}, game{}, steam{}, vr{}, render{}, input{};
-    HWND stick{}, motion{}, smooth{}, snap{}, controller{}, logging{}, stick_value{}, motion_value{},
-        smooth_value{};
+    HWND stick{}, motion{}, smooth{}, snap{}, turn_speed{}, turn_speed_value{}, controller{}, logging{},
+        stick_value{}, motion_value{}, smooth_value{};
     HFONT font{}, bold_font{};
     HBRUSH background{CreateSolidBrush(RGB(246, 248, 251))};
     std::vector<HWND> status_widgets, settings_widgets, action_buttons;

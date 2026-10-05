@@ -13,6 +13,18 @@ origin and hand orientation; hand-position parallax is not implemented.
 Input is gated by focus, tracking, game mode, menus, and session state. Centering
 and button release are required after context changes to prevent stale input.
 
+## Turning
+
+The right stick turns the player only while walking. Snap mode requires neutral
+between turns; smooth mode integrates deflection and high-resolution elapsed
+time at the chosen speed. Both update the game's native and VR headings together before its VR
+update, without changing tracked headset poses. Smooth mode also bypasses native
+22.5-degree rounding in the three VR rotation consumers. That continuous heading
+is retained through puzzles and menus. Each input sample is consumed once.
+Menus, puzzles, focus loss and stale input block turning and require centering
+before it resumes. The stick remains available for puzzle cursor and
+menu input in those contexts.
+
 ## Resting height
 
 Every game process starts with the native eye position unchanged. On a fresh F7

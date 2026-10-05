@@ -88,8 +88,10 @@ void Backend::apply_settings(const Settings& settings) {
     current_.settings = settings;
     if (!current_.uncertain && current_.input.state == L"running" &&
         (current_.input.smoothing_ms != current_.settings.smoothing_ms ||
-         current_.input.snap_steps != current_.settings.snap_steps || !current_.input.legacy_axis ||
-         current_.input.logging != current_.settings.logging)) {
+         current_.input.snap_steps != current_.settings.snap_steps ||
+         current_.input.smooth_turn_speed !=
+             (current_.settings.smooth_turn ? current_.settings.smooth_turn_speed : 0) ||
+         !current_.input.legacy_axis || current_.input.logging != current_.settings.logging)) {
         const bool enabled = current_.input.enabled;
         current_.input = control(SessionKind::input, L"stop");
         current_.input = control(SessionKind::input, L"start");

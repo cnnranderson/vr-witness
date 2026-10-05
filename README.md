@@ -2,7 +2,7 @@
 
 A portable Windows mod for The Witness's native VR mode. Fixes headset cursor
 and pause rendering, and adds controller movement, pointing, puzzle input,
-snap turning, and menu navigation.
+snap or smooth turning, and menu navigation.
 
 ## Quick start
 
@@ -25,7 +25,7 @@ them running. Close the game and launcher before updating the mod.
 | Control | Action |
 | --- | --- |
 | Left stick | Walk |
-| Right stick | Snap turn while walking; move the puzzle cursor |
+| Right stick | Turn while walking; move the puzzle cursor |
 | Right trigger | Activate, click, and draw |
 | Right A | Recenter pointing and switch from stick cursor to pointing |
 | Left B | Toggle the pause/settings menu |
@@ -48,12 +48,16 @@ Change values in **Settings**, then select **Save settings**.
 | Analog stick cursor speed | 20% | 10-300% of view width per second |
 | Controller pointing speed | 60% | 10-300% of view width per second |
 | Pointing smoothing | 80 ms | 0-250 ms |
-| Snap turning | 22.5 degrees | Off, 22.5, 45, 90 degrees |
+| Turning | Snap 22.5 degrees | Off, snap 22.5/45/90 degrees, smooth |
+| Smooth turn speed | 60 degrees/second | 30-180 degrees/second |
 | Controller type | Knuckles | Xbox 360 and Steam Frame unavailable |
 | Debug logging | Off | 2 MiB limit per file |
 
-Speeds update within about one second. Other changes briefly restart affected
-fixes. Settings are stored in `config` beside the launcher.
+Cursor speeds update within about one second. Other changes briefly restart
+affected fixes. Settings are stored in `config` beside the launcher.
+
+Smooth turning scales with stick deflection and only runs while walking.
+Center the stick after leaving a puzzle or menu to resume turning.
 
 Each game launch starts at its native default height. With the game focused,
 outside puzzles and menus, press **F7** to set your current posture to the game's
@@ -73,7 +77,7 @@ through **Launch VR**. Close the game before switching mod builds.
 ## Limitations
 
 - Only one [verified executable](docs/native-integration.md) is supported.
-- Menu navigation and height adjustment still need headset validation.
+- Smooth turning, menu navigation, and height adjustment need headset validation.
 - Excessive forward movement when entering some puzzles remains unresolved.
 - Hand-position parallax and fixed-view/mono puzzle modes are not implemented.
 - Steam Frame, other controller profiles, and extended play need broader testing.

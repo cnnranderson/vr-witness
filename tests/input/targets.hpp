@@ -7,6 +7,17 @@ extern int fixture_player;
 extern unsigned native_eye_calls;
 extern "C" witness::input::Vec3* TestInputEye(witness::input::Vec3*, void*);
 int check_height_hook();
+int check_trigger_hook();
+int check_smooth_turn_hook();
+void game_vr_update();
+void game_vr_rotations();
+extern float fixture_rotations[3][4];
+extern "C" void TestInputRotation(float*, float, float, float, float);
+extern witness::input::Axis fixture_right_axis;
+extern bool fixture_trigger_scenario, fixture_left_trigger, fixture_right_trigger, fixture_swap_roles,
+    fixture_controllers_connected, fixture_captured, fixture_controller_state_valid;
+extern witness::input::Context fixture_trigger_context;
+extern unsigned fixture_trigger_presses;
 extern unsigned input_frame;
 extern unsigned native_polls;
 extern "C" void TestInputPoll();

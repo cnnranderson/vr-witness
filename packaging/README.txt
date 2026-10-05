@@ -14,7 +14,7 @@ The game installation stays unchanged.
 
 CONTROLS
 Left stick: walk.
-Right stick: snap turn while walking; move the puzzle cursor.
+Right stick: turn while walking; move the puzzle cursor.
 Right trigger: activate, click, and draw.
 Right A: recenter pointing and switch from stick cursor to pointing.
 Left B: toggle the pause/settings menu.
@@ -30,8 +30,11 @@ may require separate B presses.
 SETTINGS
 Change values in Settings, then select Save settings.
 Defaults: stick speed 20%, pointing speed 60%, smoothing 80 ms, snap 22.5 degrees.
+Turning supports Off, snap 22.5/45/90 degrees, or Smooth.
+Smooth turn speed: 30-180 degrees/second, default 60; scales with stick deflection.
+Turning only runs while walking; center the stick after puzzles or menus.
 Controller type: Knuckles. Xbox 360 and Steam Frame are unavailable.
-Speeds update within about one second. Other changes restart affected fixes.
+Cursor speeds update within about one second. Other changes restart affected fixes.
 Settings are stored in config beside the launcher.
 Debug logging is off by default; each log is capped at 2 MiB.
 
@@ -52,8 +55,8 @@ TROUBLESHOOTING AND LIMITATIONS
 If VR is not ready, check SteamVR and wake the headset. Restart a non-VR game
 through Launch VR. Errors appear in dialogs. For diagnostics, enable Debug
 logging, reproduce the issue, and select Open logs.
-Only one verified game executable is supported. Menu navigation and height
-adjustment need headset validation. Forward movement on puzzle entry remains
+Only one verified game executable is supported. Smooth turning, menu navigation,
+and height adjustment need headset validation. Forward movement on puzzle entry remains
 unresolved. Steam Frame and extended play need broader testing.
 The executable is unsigned.
 

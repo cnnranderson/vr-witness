@@ -17,6 +17,7 @@ enum class ControlId : int {
     snap_choice = 113,
     controller_choice = 114,
     logging = 115,
+    turn_speed_slider = 116,
     overall_status = 200,
     installation_label = 202,
     game_path = 203,
@@ -47,6 +48,8 @@ enum class ControlId : int {
     settings_help = 231,
     logging_help = 232,
     height_label = 233,
+    turn_speed_label = 234,
+    turn_speed_value = 235,
     close_help = 241,
     hotkeys = 242,
 };

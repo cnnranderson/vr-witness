@@ -1,6 +1,7 @@
 #include "input/controller_input.hpp"
 #include "input/puzzle_aim.hpp"
 #include "input/snap_turn.hpp"
+#include "input/smooth_turn.hpp"
 #include "input/stick_cursor.hpp"
 #include "input/settings.hpp"
 #include "input/controller_buttons.hpp"
@@ -163,6 +164,70 @@ int main() {
         check(recenter_pressed(buttons));
         buttons.valid = false;
         check(!recenter_pressed(buttons));
+        const auto integrate_turn = [](unsigned interval, float axis, unsigned speed) {
+            SmoothTurn turn;
+            Hand hand;
+            hand.valid = true;
+            hand.device = 1;
+            hand.stick = 2;
+            hand.types[2] = 2;
+            turn.update(hand, true, 1000, speed);
+            float total = 0;
+            hand.state.axes[2] = {axis, 0};
+            for (unsigned elapsed = interval; elapsed <= 1000; elapsed += interval)
+                total += turn.update(hand, true, 1000 + elapsed, speed);
+            return total;
+        };
+        check(std::abs(integrate_turn(10, 1, 60) + 1.04719755f) < .00001f);
+        check(std::abs(integrate_turn(20, 1, 60) - integrate_turn(10, 1, 60)) < .00001f);
+        check(std::abs(integrate_turn(10, -.6f, 120) - 1.04719755f) < .00001f);
+        check(integrate_turn(10, .2f, 60) == 0 && integrate_turn(10, 1, 29) == 0);
+        for (const auto rate : {90, 120, 144}) {
+            SmoothTurn turn;
+            Hand hand;
+            hand.valid = true;
+            hand.device = 1;
+            hand.stick = 2;
+            hand.types[2] = 2;
+            turn.update(hand, true, 1000.0, 60);
+            hand.state.axes[2] = {1, 0};
+            const float expected = -1.04719755f / rate;
+            for (int frame = 1; frame <= rate; ++frame)
+                check(std::abs(turn.update(hand, true, 1000.0 + frame * 1000.0 / rate, 60) - expected) <
+                      .0000001f);
+            check(turn.update(hand, true, std::numeric_limits<double>::quiet_NaN(), 60) == 0);
+            check(turn.update(hand, true, 2010.0, 60) == 0); // Invalid time requires neutral again.
+        }
+        SmoothTurn smooth_turn;
+        Hand smooth_hand;
+        smooth_hand.valid = true;
+        smooth_hand.device = 1;
+        smooth_hand.stick = 0;
+        smooth_hand.legacy_axis = true;
+        smooth_hand.types[0] = 1;
+        smooth_hand.state.axes[0] = {1, 0};
+        check(smooth_turn.update(smooth_hand, true, 1000, 60) == 0);
+        smooth_hand.state.axes[0] = {};
+        check(smooth_turn.update(smooth_hand, true, 1010, 60) == 0);
+        smooth_hand.state.axes[0] = {1, 0};
+        check(smooth_turn.update(smooth_hand, true, 1020, 60) < 0);
+        check(smooth_turn.update(smooth_hand, true, 1020, 60) == 0); // No duplicate elapsed time.
+        check(smooth_turn.update(smooth_hand, true, 1121, 60) == 0);
+        check(smooth_turn.update(smooth_hand, true, 1130, 60) == 0); // A stall requires neutral.
+        smooth_hand.state.axes[0] = {};
+        smooth_turn.update(smooth_hand, true, 1140, 60);
+        smooth_hand.state.axes[0] = {1, 0};
+        check(smooth_turn.update(smooth_hand, false, 1150, 60) == 0);
+        check(smooth_turn.update(smooth_hand, true, 1160, 60) == 0);
+        smooth_hand.state.axes[0] = {};
+        smooth_turn.update(smooth_hand, true, 1170, 60);
+        smooth_hand.device = 2;
+        smooth_hand.state.axes[0] = {1, 0};
+        check(smooth_turn.update(smooth_hand, true, 1180, 60) == 0);
+        smooth_hand.state.axes[0] = {};
+        smooth_turn.update(smooth_hand, true, 1190, 60);
+        smooth_hand.state.axes[0] = {std::numeric_limits<float>::quiet_NaN(), 0};
+        check(smooth_turn.update(smooth_hand, true, 1200, 60) == 0);
         SnapTurn snap;
         Hand right_hand;
         right_hand.valid = true;

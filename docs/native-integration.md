@@ -33,12 +33,47 @@ bit 1, trigger is bit 33, and right-stick deflection also sets bit 32. This alia
 requires suppressing the native pad/back route where manual cursor or menu
 navigation owns the input. Do not infer physical labels from OpenVR bit names.
 
+The native poll at RVA 37AA00 uses the first enumerated controller for its
+trigger. Device order can therefore select the left hand. The existing key
+hook substitutes the right-hand role's bit 33 only for key 135 from the verified
+caller returning to 37AC36. Its instruction sequence from 37AC17 is guarded.
+Press, hold and release retain native semantics; no extra click is synthesized.
+Disabling the fix restores the native route. Role changes, lost focus/tracking,
+runtime capture and menu transitions require a fresh release.
+
+## Turning
+
+Snap and smooth turning share the verified native VR-update callback and heading
+fields. Smooth input uses QueryPerformanceCounter with fractional milliseconds,
+a 0.2 stick deadzone and the configured degrees per second. GetTickCount64 is
+kept for session deadlines, not angle integration: its coarse ticks can skip
+rotation frames. Timing tests cover equal increments at 90, 120 and 144 Hz. Gaps over 100 ms disarm it instead of accumulating
+a catch-up turn. Only a fresh walking sample from the same game thread can update
+both headings, and its delta is consumed once. Puzzle and menu input remain on
+their existing routes.
+
+The game rounds VR yaw to 22.5 degrees at three axis-angle construction calls,
+returning to 23E614 (tracked translation), 240F93 (rotation helper) and 245AB0
+(headset orientation). Smooth mode hooks the shared constructor at 2E72A0 and
+substitutes the unrounded yaw only for those callers. Its x64 arguments are an
+output pointer to four floats, three float axis components, and a fifth float
+angle in radians on the stack. The prologue, angle load, output stores and all
+three call sequences are checked against live bytes before hooking.
+
+Keep that continuous heading in menus and puzzles while blocking new stick
+turns, so entering them cannot round the view back to a different angle. Snap
+mode, disabled fixes and unrelated constructor calls retain native behavior.
+The constructor and trampoline stay pinned until process exit; no headset pose
+or global rounding constant is modified. Fixtures model the native rounding
+and compare all three output quaternions, rather than only the stored headings.
+
 ## Pause-menu navigation
 
 Either stick selects the dominant direction after centering. The first pulse is
 immediate; holding repeats after 350 ms, then every 150 ms. Up/down selects menu
 items; left/right adjusts the current item. Left B toggles pause/settings and
-right B sends native back in puzzles or menus. Confirm stays native.
+right B sends native back in puzzles or menus. The right trigger confirms through
+the corrected native trigger route.
 
 The existing input-poll hook calls the verified native key setter (RVA 364210)
 with a press/release pair, so no synthetic key remains held after a callback.

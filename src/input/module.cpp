@@ -7,6 +7,7 @@
 #include "input/controller_input.hpp"
 #include "input/puzzle_aim.hpp"
 #include "input/snap_turn.hpp"
+#include "input/smooth_turn.hpp"
 #include "input/stick_cursor.hpp"
 #include "input/settings.hpp"
 #include "input/controller_buttons.hpp"
@@ -35,9 +36,11 @@ NativeKey original_key{};
 void* key_site{};
 void* key_caller{};
 void* menu_caller{};
+void* trigger_caller{};
 std::atomic<std::uint64_t> stick_applied{0}, cancel_suppressed{0};
 StickCursor stick_cursor;
 BButton puzzle_back, menu_button;
+TriggerButton right_trigger;
 MenuStick menu_left, menu_right;
 std::atomic<std::uint64_t> back_presses{0};
 thread_local bool within_native_poll{};
@@ -62,10 +65,17 @@ void* vr_update_site{};
 void* vr_update_caller{};
 float* yaw_pointer{};
 float* vr_yaw_pointer{};
+// Native axis-angle constructor: output is four floats, angle is the fifth argument in radians.
+using Rotation = void (*)(float*, float, float, float, float);
+Rotation original_rotation{};
+void* rotation_site{};
+std::array<void*, 3> rotation_callers{};
 std::atomic<bool> snap_capture{false}, allow_snap{false};
 std::atomic<unsigned> snap_steps{0};
 std::atomic<std::uint64_t> turn_calls{0}, turn_applied{0}, turn_route_calls{0};
 SnapTurn snap_turn;
+SmoothTurn smooth_turn;
+std::atomic<unsigned> smooth_turn_speed{0};
 Move original_move{};
 void* poll_site{};
 void* move_site{};
@@ -132,6 +142,7 @@ struct Sample {
     bool aim_allowed{}, stick_active{};
     Axis aim_target{}, aim_delta{};
     int snap_direction{};
+    float smooth_delta{};
     bool turn_ready{}, turn_allowed{};
     float yaw_before{}, yaw_after{}, vr_yaw_before{}, vr_yaw_after{};
 } latest;
@@ -288,6 +299,19 @@ AimFrame aim_frame() {
     return f;
 }
 
+// Keep sub-frame turn timing independent of the coarse session/deadline clock.
+double turn_time_ms() {
+    static const double milliseconds_per_tick = [] {
+        LARGE_INTEGER frequency{};
+        return QueryPerformanceFrequency(&frequency) && frequency.QuadPart > 0 ? 1000.0 / frequency.QuadPart
+                                                                               : 0.0;
+    }();
+    LARGE_INTEGER counter{};
+    return milliseconds_per_tick && QueryPerformanceCounter(&counter)
+               ? counter.QuadPart * milliseconds_per_tick
+               : 0.0;
+}
+
 void hooked_poll() {
     Active guard;
     polled_keyboard = nullptr;
@@ -345,6 +369,7 @@ void hooked_poll() {
             pointing.reset();
             calibration.disarm();
             snap_turn.reset();
+            smooth_turn.reset();
         }
         // Reset cursor latches here too: menus can skip the cursor callback.
         if (!puzzle(s.context) || s.captured || !s.pose_valid || !s.hands[1].valid || !allow_aim.load()) {
@@ -367,7 +392,10 @@ void hooked_poll() {
         const auto left = menu_left.update(s.hands[0], menu_allowed, s.tick);
         const auto right = menu_right.update(s.hands[1], menu_allowed, s.tick);
         navigation = left != MenuDirection::none ? left : right;
-        s.snap_direction = snap_turn.update(s.hands[1], s.allowed && allow_snap.load(), s.tick);
+        s.snap_direction =
+            snap_turn.update(s.hands[1], s.allowed && allow_snap.load() && snap_steps.load() != 0, s.tick);
+        s.smooth_delta = smooth_turn.update(s.hands[1], s.allowed && allow_snap.load(), turn_time_ms(),
+                                            smooth_turn_speed.load());
         s.allowed = s.allowed && allow_move.load();
         if (!s.allowed)
             resting_height.disarm();
@@ -479,6 +507,25 @@ Axis* hooked_cursor(Axis* output, bool native_mode) {
 void hooked_key(void* keyboard, int key, bool pressed) {
     const auto caller = WITNESS_RETURN_ADDRESS();
     Active guard;
+    if (within_native_poll && caller == trigger_caller && key == 0x135 && enabled.load() &&
+        allow_aim.load() && GetTickCount64() < deadline.load()) {
+        const auto c = context();
+        void** table{};
+        const bool live = current_system() == system_object &&
+                          read(reinterpret_cast<std::uintptr_t>(system_object), table) &&
+                          table == system_table;
+        Hand right;
+        bool allowed = false;
+        if (live) {
+            right = hand(2);
+            if (right.device == method<std::uint32_t (*)(void*, int)>(role_slot)(system_object, 1))
+                right.valid = false;
+            allowed = c.focused && c.tracking && (walking(c) || puzzle(c) || c.menu) &&
+                      !method<bool (*)(void*)>(focus_slot)(system_object);
+        }
+        Lock lock;
+        pressed = right_trigger.update(right, allowed && enabled.load() && allow_aim.load(), c.menu);
+    }
     if (within_native_poll && caller == key_caller && key == 0x136)
         polled_keyboard = keyboard;
     if (caller == key_caller && key == 0x136 && pressed && enabled.load() && allow_aim.load() &&
@@ -500,6 +547,30 @@ void hooked_key(void* keyboard, int key, bool pressed) {
     original_key(keyboard, key, pressed);
 }
 
+bool native_vr_active() {
+    if (fixture_context)
+        return true;
+    const auto renderer = global<std::uintptr_t>(0x469A5B0);
+    unsigned char active{};
+    return renderer && read(renderer + 0x25, active) && active == 1;
+}
+
+void hooked_rotation(float* output, float x, float y, float z, float angle) {
+    const auto caller = WITNESS_RETURN_ADDRESS();
+    Active guard;
+    if (enabled.load() && smooth_turn_speed.load() && allow_snap.load() &&
+        GetTickCount64() < deadline.load() &&
+        std::find(rotation_callers.begin(), rotation_callers.end(), caller) != rotation_callers.end() &&
+        x == 0 && y == 0 && z == 1 && native_vr_active()) {
+        float yaw{};
+        // Keep the continuous heading through puzzles and menus even when stick input is blocked.
+        if (read(reinterpret_cast<std::uintptr_t>(vr_yaw_pointer), yaw) && std::isfinite(yaw) &&
+            std::abs(yaw) <= 10000.f)
+            angle = yaw;
+    }
+    original_rotation(output, x, y, z, angle);
+}
+
 void hooked_vr_update() {
     const auto caller = WITNESS_RETURN_ADDRESS();
     Active guard;
@@ -508,28 +579,29 @@ void hooked_vr_update() {
         Lock lock;
         const auto now = GetTickCount64();
         const auto c = context();
-        const auto renderer = fixture_context ? 0 : global<std::uintptr_t>(0x469A5B0);
-        unsigned char native_vr{};
-        const bool vr_active =
-            fixture_context || (renderer && read(renderer + 0x25, native_vr) && native_vr == 1);
+        const bool vr_active = native_vr_active();
         ++turn_route_calls;
         const bool ready = enabled.load() && now < deadline.load() && latest.thread == GetCurrentThreadId() &&
                            now - latest.tick <= 50 && walking(c) && walking(latest.context) &&
                            !latest.captured && latest.hands[1].valid && vr_active;
         latest.turn_ready = ready;
         const bool allowed = ready && allow_snap.load();
-        const int direction = latest.snap_direction;
+        const float delta = smooth_turn_speed.load()
+                                ? latest.smooth_delta
+                                : -latest.snap_direction * snap_radians(snap_steps.load());
         latest.snap_direction = 0;
+        latest.smooth_delta = 0;
         latest.turn_allowed = allowed;
         float yaw{}, vr_yaw{}, next_yaw{}, next_vr_yaw{};
         const bool readable = read(reinterpret_cast<std::uintptr_t>(yaw_pointer), yaw) &&
                               read(reinterpret_cast<std::uintptr_t>(vr_yaw_pointer), vr_yaw);
         latest.yaw_before = latest.yaw_after = yaw;
         latest.vr_yaw_before = latest.vr_yaw_after = vr_yaw;
-        if (!allowed)
+        if (!allowed) {
             snap_turn.reset();
-        if (allowed && readable &&
-            snap_headings(yaw, vr_yaw, direction, snap_steps.load(), next_yaw, next_vr_yaw)) {
+            smooth_turn.reset();
+        }
+        if (allowed && readable && turn_headings(yaw, vr_yaw, delta, next_yaw, next_vr_yaw)) {
             // Update both verified heading fields before the native VR update consumes them.
             *yaw_pointer = next_yaw;
             *vr_yaw_pointer = next_vr_yaw;
@@ -587,10 +659,22 @@ void validate() {
         key_caller = key_return ? *key_return : nullptr;
         const auto menu_return = reinterpret_cast<void**>(GetProcAddress(main, "TestInputMenuReturn"));
         menu_caller = menu_return ? *menu_return : nullptr;
-        if (aim_capture.load() && (!key_site || !key_caller || !menu_caller))
+        const auto trigger_return = reinterpret_cast<void**>(GetProcAddress(main, "TestInputTriggerReturn"));
+        trigger_caller = trigger_return ? *trigger_return : nullptr;
+        if (aim_capture.load() && (!key_site || !key_caller || !menu_caller || !trigger_caller))
             throw std::runtime_error("Native key fixture exports missing");
         if (snap_capture.load() && (!vr_update_site || !vr_update_caller || !yaw_pointer || !vr_yaw_pointer))
             throw std::runtime_error("Snap fixture exports missing");
+        if (smooth_turn_speed.load()) {
+            rotation_site = reinterpret_cast<void*>(GetProcAddress(main, "TestInputRotation"));
+            const auto callers = reinterpret_cast<void**>(GetProcAddress(main, "TestInputRotationReturns"));
+            if (!rotation_site || !callers)
+                throw std::runtime_error("Rotation fixture exports missing");
+            std::copy_n(callers, rotation_callers.size(), rotation_callers.begin());
+            if (std::find(rotation_callers.begin(), rotation_callers.end(), nullptr) !=
+                rotation_callers.end())
+                throw std::runtime_error("Rotation fixture callers missing");
+        }
         if (!poll_site || !move_site || !fixture_context || !fixture_system || !move_caller || !cursor_site ||
             !fixture_aim_frame || !fixture_compositor || !cursor_caller)
             throw std::runtime_error("Input fixture exports missing");
@@ -645,6 +729,8 @@ void validate() {
                 "ba42010000488d05f94c43004889442440488d05e94c43008d4aff4889442438448d4a04448d4203f30f1144243044897c242844897c2420e80c3d0000");
             match(game_base, 0x1FC852,
                   "803d43214200007559f30f1005312142000f2f05666c31007233833d9d374300047c2a488b0564384300");
+            match(game_base, 0x37AC17, "488b0542f43104450fb6c7488b08ba35010000488b8990000000e8da95feff");
+            trigger_caller = reinterpret_cast<void*>(game_base + 0x37AC36);
             menu_caller = reinterpret_cast<void*>(game_base + 0x37AC17);
             key_site = reinterpret_cast<void*>(game_base + 0x364210);
             key_caller = reinterpret_cast<void*>(game_base + 0x37AC55);
@@ -664,6 +750,26 @@ void validate() {
             vr_update_caller = reinterpret_cast<void*>(game_base + 0x24A467);
             yaw_pointer = reinterpret_cast<float*>(game_base + 0x6303EC);
             vr_yaw_pointer = reinterpret_cast<float*>(game_base + 0x630420);
+        }
+        if (smooth_turn_speed.load()) {
+            match(game_base, 0x2E72A0, "40534883ec600f297424500f297c2440");
+            match(game_base, 0x2E731D, "f30f10b42490000000f30f593592c122000f28c6e81a471300");
+            match(
+                game_base, 0x2E734D,
+                "f30f117b08f30f110bf30f115304e8f04113000f287424500f287c2440440f28442430f30f11430c440f284c24204883c4605bc3");
+            match(
+                game_base, 0x23E5BD,
+                "f20f5915dbb92d000f100574bf4504f20f5915b4972e00410f28cd0f1105311f3f00660f5ac2f30f2dc0660f6ec00f5bc00f5ad0f20f5915af9c2d00f20f5915d7972e00660f5ac2410f28d5f30f11442420e88c8c0a00");
+            match(
+                game_base, 0x240F30,
+                "40534883ec30f30f1005e2f43e00f30f101d8a252d000f57c9488bd90f5ac0f20f590549902d00f20f5905296e2e00660f5ac0f30f2dc0660f6ec00f5bc00f5ad0f20f59152f732d00f20f5915576e2e00660f5ac20f57d2f30f11442420e80d630a00");
+            match(
+                game_base, 0x245A45,
+                "f30f1005d3a93e00f30f101d7bda2c000f57c9488d4c2440440f296c2460440f297c24500f5ac0f20f59052c452d00f20f59050c232e00660f5ac0f30f2dc0660f6ec00f5bc00f5ad0f20f591512282d00f20f59153a232e00660f5ac20f57d2f30f11442420e8f0170a00");
+            rotation_site = reinterpret_cast<void*>(game_base + 0x2E72A0);
+            rotation_callers = {reinterpret_cast<void*>(game_base + 0x23E614),
+                                reinterpret_cast<void*>(game_base + 0x240F93),
+                                reinterpret_cast<void*>(game_base + 0x245AB0)};
         }
         poll_site = reinterpret_cast<void*>(game_base + 0x37AA00);
         move_site = reinterpret_cast<void*>(game_base + 0x242230);
@@ -716,6 +822,7 @@ void validate() {
 void set_controls(bool value) {
     Lock lock;
     resting_height.disarm();
+    right_trigger.reset();
     puzzle_back.reset();
     menu_button.reset();
     menu_left.reset();
@@ -729,21 +836,25 @@ void set_controls(bool value) {
     latest.aim_allowed = false;
     latest.aim_delta = {};
     snap_turn.reset();
+    smooth_turn.reset();
     latest.snap_direction = 0;
+    latest.smooth_delta = 0;
     latest.turn_allowed = false;
     allow_move.store(value);
     allow_aim.store(value && aim_capture.load());
-    allow_snap.store(value && snap_steps.load() != 0);
+    allow_snap.store(value && (snap_steps.load() != 0 || smooth_turn_speed.load() != 0));
 }
 
 void prepare(bool moving, bool legacy, ULONGLONG until, bool aiming = false, bool aim_trace = false,
-             const AimSettings& settings = AimSettings{}, unsigned turning_steps = 0,
-             bool turn_trace = false) {
-    if (turning_steps && !valid_snap_steps(turning_steps))
-        throw std::runtime_error("Invalid snap angle");
+             const AimSettings& settings = AimSettings{}, unsigned turning_steps = 0, bool turn_trace = false,
+             unsigned smooth_speed = 0) {
+    if ((turning_steps && !valid_snap_steps(turning_steps)) ||
+        (smooth_speed && (!valid_turn_speed(smooth_speed) || turning_steps)))
+        throw std::runtime_error("Invalid turning settings");
     snap_steps = turning_steps;
-    snap_capture = turning_steps != 0 || turn_trace;
-    allow_snap = turning_steps != 0;
+    smooth_turn_speed = smooth_speed;
+    snap_capture = turning_steps != 0 || smooth_speed != 0 || turn_trace;
+    allow_snap = turning_steps != 0 || smooth_speed != 0;
     if (!valid_settings(settings))
         throw std::runtime_error("Invalid pointing settings");
     aim_capture = aiming || aim_trace;
@@ -773,16 +884,21 @@ void prepare(bool moving, bool legacy, ULONGLONG until, bool aiming = false, boo
     if (snap_capture.load() && !original_vr_update)
         require(MH_CreateHook(vr_update_site, reinterpret_cast<void*>(&hooked_vr_update),
                               reinterpret_cast<void**>(&original_vr_update)));
+    if (smooth_turn_speed.load() && !original_rotation)
+        require(MH_CreateHook(rotation_site, reinterpret_cast<void*>(&hooked_rotation),
+                              reinterpret_cast<void**>(&original_rotation)));
     {
         Lock lock;
         latest = {};
         resting_height.disarm();
+        right_trigger.reset();
         puzzle_back.reset();
         menu_button.reset();
         menu_left.reset();
         menu_right.reset();
         stick_cursor.reset();
         snap_turn.reset();
+        smooth_turn.reset();
         movement.reset();
         pointing.reset();
         calibration.reset();
@@ -814,6 +930,8 @@ void prepare(bool moving, bool legacy, ULONGLONG until, bool aiming = false, boo
     }
     if (snap_capture.load())
         require(MH_EnableHook(vr_update_site));
+    if (smooth_turn_speed.load())
+        require(MH_EnableHook(rotation_site));
     enabled = true;
 }
 
@@ -834,6 +952,11 @@ void stop() {
     }
     if (original_key) {
         const auto r = MH_DisableHook(key_site);
+        if (r != MH_OK && r != MH_ERROR_DISABLED)
+            require(r);
+    }
+    if (original_rotation) {
+        const auto r = MH_DisableHook(rotation_site);
         if (r != MH_OK && r != MH_ERROR_DISABLED)
             require(r);
     }
@@ -946,8 +1069,9 @@ void session_record(std::ofstream& target, const char* event) {
         << ",\"stick_cursor_speed_percent\":" << stick_speed_percent.load()
         << ",\"aim_speed\":" << motion_speed_percent.load() / 100.f
         << ",\"aim_smoothing_ms\":" << aim_settings.smoothing_ms << ",\"snap_steps\":" << snap_steps.load()
-        << ",\"snap_enabled\":" << (enabled.load() && allow_snap.load())
-        << ",\"turn_calls\":" << turn_calls.load() << ",\"turn_applied\":" << turn_applied.load() << "}\n";
+        << ",\"snap_enabled\":" << (enabled.load() && allow_snap.load() && snap_steps.load() != 0)
+        << ",\"smooth_turn_speed\":" << smooth_turn_speed.load() << ",\"turn_calls\":" << turn_calls.load()
+        << ",\"turn_applied\":" << turn_applied.load() << "}\n";
 
     if (!log)
         throw std::runtime_error("Input session log write failed");
@@ -1117,6 +1241,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessInputSessionControl(void* a
         request.legacy_axis0 > 1 || request.pointing > 1 || request.aim_speed_percent < 10 ||
         request.aim_speed_percent > 300 || request.aim_smoothing_ms > 250 || request.stick_speed_percent ||
         (request.snap_steps && !valid_snap_steps(request.snap_steps)) ||
+        (request.smooth_turn_speed && (!valid_turn_speed(request.smooth_turn_speed) || request.snap_steps)) ||
         std::find(std::begin(request.log_path), std::end(request.log_path), L'\0') ==
             std::end(request.log_path))
         return 1;
@@ -1146,7 +1271,8 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessInputSessionControl(void* a
             session_stop = false;
             prepare(true, request.legacy_axis0 != 0, std::numeric_limits<ULONGLONG>::max(),
                     request.pointing != 0, false,
-                    {request.aim_speed_percent / 100.f, request.aim_smoothing_ms}, request.snap_steps);
+                    {request.aim_speed_percent / 100.f, request.aim_smoothing_ms}, request.snap_steps, false,
+                    request.smooth_turn_speed);
             session_record(*log, "input.session.started");
             session_state = SessionState::running;
             auto* worker_log = log.release();
@@ -1193,6 +1319,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessInputSessionControl(void* a
     response.stick_applied = stick_applied.load();
     response.cancel_suppressed = cancel_suppressed.load();
     response.snap_steps = snap_steps.load();
+    response.smooth_turn_speed = smooth_turn_speed.load();
     response.turn_calls = turn_calls.load();
     response.turn_applied = turn_applied.load();
     response.cursor_calls = cursor_calls.load();

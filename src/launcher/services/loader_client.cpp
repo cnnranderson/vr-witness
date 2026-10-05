@@ -137,6 +137,10 @@ Session parse_session(const std::string& json, SessionKind kind) {
                              : angle && *angle == "45" ? 2
                              : angle && *angle == "90" ? 4
                                                        : 0;
+        session.smooth_turn_speed = integer(json, "smooth_turn_speed");
+        if (session.smooth_turn_speed &&
+            (session.smooth_turn_speed < 30 || session.smooth_turn_speed > 180 || session.snap_steps))
+            throw std::runtime_error("Invalid loader turning settings.");
         session.legacy_axis = field(json, "legacy_axis0") && boolean(json, "legacy_axis0");
         if (session.loaded) {
             session.height_calibrated = boolean(json, "height_calibrated");
@@ -178,7 +182,10 @@ Session send_session_command(const fs::path& root, DWORD pid, const fs::path& ga
                          L"--aim-smoothing-ms", std::to_wstring(settings.smoothing_ms)});
             if (settings.controller == ControllerType::knuckles)
                 args.push_back(L"--controller-legacy-axis0");
-            if (settings.snap_steps)
+            if (settings.smooth_turn)
+                args.insert(args.end(), {L"--controller-smooth", L"--turn-speed",
+                                         std::to_wstring(settings.smooth_turn_speed)});
+            else if (settings.snap_steps)
                 args.insert(args.end(), {L"--controller-snap", L"--snap-angle",
                                          settings.snap_steps == 1   ? L"22.5"
                                          : settings.snap_steps == 2 ? L"45"

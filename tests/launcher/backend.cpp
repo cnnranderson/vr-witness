@@ -85,6 +85,7 @@ void check_steam_library_discovery(const fs::path& root) {
 void check_settings_round_trip(const fs::path& root) {
     Settings settings;
     require(load_settings(root) == settings, "default settings");
+    require(settings.snap_steps == 1 && !settings.smooth_turn, "22.5-degree snap is the default");
     settings.stick_speed = 22;
     settings.motion_speed = 110;
     settings.smoothing_ms = 120;
@@ -92,6 +93,17 @@ void check_settings_round_trip(const fs::path& root) {
     settings.logging = true;
     save_settings(root, settings);
     require(load_settings(root) == settings, "settings round trip");
+    settings.smooth_turn = true;
+    settings.snap_steps = 0;
+    settings.smooth_turn_speed = 90;
+    save_settings(root, settings);
+    require(load_settings(root) == settings, "smooth turning settings round trip");
+    auto bad_turn = settings;
+    bad_turn.snap_steps = 1;
+    require(!valid_settings(bad_turn), "snap and smooth cannot both be enabled");
+    bad_turn = settings;
+    bad_turn.smooth_turn_speed = 181;
+    require(!valid_settings(bad_turn), "invalid smooth turning speed rejected");
     auto unsupported = settings;
     unsupported.controller = ControllerType::steam_frame;
     require(!valid_settings(unsupported), "unavailable controller is rejected");
@@ -112,6 +124,11 @@ void check_session_status_parsing() {
     auto parsed = parse_session(json, SessionKind::input);
     require(parsed.loaded && parsed.enabled && !parsed.fault && parsed.snap_steps == 1 && parsed.logging,
             "input status parse including 22.5");
+    require(parsed.smooth_turn_speed == 0, "snap status leaves smooth turning disabled");
+    const auto smooth_status = parse_session(
+        R"({"state":"running","loaded":true,"enabled":true,"fault":false,"snap_angle":0,"smooth_turn_speed":90,"height_calibrated":false,"height_m":0,"height_offset_m":0})",
+        SessionKind::input);
+    require(smooth_status.smooth_turn_speed == 90 && smooth_status.snap_steps == 0, "smooth turning status");
     require(parsed.height_calibrated && std::abs(parsed.height_m - 1.69f) < .0001f &&
                 parsed.height_offset_m == -.25f,
             "signed height status");

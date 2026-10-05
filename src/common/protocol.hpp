@@ -44,7 +44,7 @@ struct SessionRequest {
 static_assert(sizeof(SessionRequest) == 2104);
 
 // Input protocol versions independently of the render protocol.
-inline constexpr std::uint32_t kInputProtocolVersion = 7;
+inline constexpr std::uint32_t kInputProtocolVersion = 8;
 
 // Zero-initialize, set size/version/command, and supply valid speed/smoothing values for every command.
 // Start consumes feature options/log_path; state, counters and active settings are returned in place.
@@ -78,10 +78,12 @@ struct InputSessionRequest {
     alignas(8) std::uint32_t height_calibrated;
     float height_m;
     float height_offset_m;
+    std::uint32_t smooth_turn_speed; // 0 disables smooth turning; otherwise 30..180 degrees/second.
 };
 
 static_assert(offsetof(InputSessionRequest, log_path) == 140);
 static_assert(offsetof(InputSessionRequest, height_calibrated) == 2192);
+static_assert(offsetof(InputSessionRequest, smooth_turn_speed) == 2204);
 static_assert(sizeof(InputSessionRequest) == 2208);
 
 enum class ProbeResult : DWORD {

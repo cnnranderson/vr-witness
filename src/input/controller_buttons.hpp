@@ -34,4 +34,33 @@ public:
         return true;
     }
 };
+
+// Preserve a trigger hold after release; device, menu and focus changes require rearming.
+class TriggerButton {
+    std::uint32_t device_{invalid_device};
+    bool armed_{}, menu_{};
+
+public:
+    void reset() {
+        device_ = invalid_device;
+        armed_ = false;
+    }
+
+    bool update(const Hand& hand, bool allowed, bool menu) {
+        if (!allowed || !hand.valid || hand.device >= 16) {
+            reset();
+            return false;
+        }
+        if (device_ != hand.device || menu_ != menu) {
+            reset();
+            device_ = hand.device;
+            menu_ = menu;
+        }
+        if (!(hand.state.pressed & (1ull << 33))) {
+            armed_ = true;
+            return false;
+        }
+        return armed_;
+    }
+};
 } // namespace witness::input

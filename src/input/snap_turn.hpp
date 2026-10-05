@@ -60,14 +60,18 @@ public:
 };
 
 // Apply the same yaw delta to native and VR headings; outputs are valid only on success.
-inline bool snap_headings(float yaw, float vr_yaw, int direction, unsigned steps, float& next_yaw,
-                          float& next_vr_yaw) {
-    if (!valid_snap_steps(steps) || (direction != 1 && direction != -1) || !std::isfinite(yaw) ||
-        !std::isfinite(vr_yaw) || std::abs(yaw) > 10000.f || std::abs(vr_yaw) > 10000.f)
+inline bool turn_headings(float yaw, float vr_yaw, float delta, float& next_yaw, float& next_vr_yaw) {
+    if (!std::isfinite(yaw) || !std::isfinite(vr_yaw) || !std::isfinite(delta) || delta == 0 ||
+        std::abs(delta) > 1.5707964f || std::abs(yaw) > 10000.f || std::abs(vr_yaw) > 10000.f)
         return false;
-    const float delta = -direction * snap_radians(steps);
     next_yaw = yaw + delta;
     next_vr_yaw = vr_yaw + delta;
     return std::isfinite(next_yaw) && std::isfinite(next_vr_yaw);
+}
+
+inline bool snap_headings(float yaw, float vr_yaw, int direction, unsigned steps, float& next_yaw,
+                          float& next_vr_yaw) {
+    return valid_snap_steps(steps) && (direction == 1 || direction == -1) &&
+           turn_headings(yaw, vr_yaw, -direction * snap_radians(steps), next_yaw, next_vr_yaw);
 }
 } // namespace witness::input

@@ -45,7 +45,7 @@ void Window::create() {
         const int available =
             monitor.rcWork.bottom - monitor.rcWork.top - (bounds.bottom - bounds.top - client.bottom);
         // Fit the tallest page on the current display.
-        dpi = std::min(dpi, std::max(72, MulDiv(available, 96, 546)));
+        dpi = std::min(dpi, std::max(72, MulDiv(available, 96, 580)));
     }
     font = CreateFontW(-scale(15), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 0, 0,
                        CLEARTYPE_QUALITY, 0, L"Segoe UI");
@@ -92,7 +92,7 @@ void Window::layout() {
 }
 
 int Window::footer_top() const {
-    return TabCtrl_GetCurSel(tabs) == 1 ? 466 : 432;
+    return TabCtrl_GetCurSel(tabs) == 1 ? 500 : 432;
 }
 
 int Window::content_height() const {

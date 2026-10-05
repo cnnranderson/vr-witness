@@ -24,6 +24,8 @@ struct Options {
     bool controller_aim = false, controller_aim_trace = false;
     bool controller_snap = false, controller_snap_trace = false, snap_angle_given = false;
     unsigned snap_steps = 1;
+    bool controller_smooth = false, turn_speed_given = false;
+    unsigned turn_speed = 60;
     DWORD aim_speed_percent = 60, aim_smoothing_ms = 80;
     bool aim_settings_given = false;
     std::wstring session;
@@ -52,6 +54,10 @@ Options options(int argc, wchar_t** argv) {
         }
         if (name == L"--controller-trace") {
             result.controller_trace = true;
+            continue;
+        }
+        if (name == L"--controller-smooth") {
+            result.controller_smooth = true;
             continue;
         }
         if (name == L"--controller-snap") {
@@ -109,6 +115,9 @@ Options options(int argc, wchar_t** argv) {
         } else if (name == L"--aim-smoothing-ms") {
             result.aim_smoothing_ms = number(value);
             result.aim_settings_given = true;
+        } else if (name == L"--turn-speed") {
+            result.turn_speed = number(value);
+            result.turn_speed_given = true;
         } else if (name == L"--snap-angle") {
             if (value == L"22.5")
                 result.snap_steps = 1;
@@ -135,6 +144,13 @@ Options options(int argc, wchar_t** argv) {
     if (result.controller_snap_trace &&
         (!result.controller_trace || !result.session.empty() || result.controller_snap))
         throw std::runtime_error("Snap trace requires a passive bounded controller capture");
+    if (result.controller_smooth &&
+        (!result.controller_session || result.session != L"start" || result.controller_snap ||
+         result.controller_snap_trace || result.turn_speed < 30 || result.turn_speed > 180))
+        throw std::runtime_error(
+            "Smooth turning requires session start, 30..180 degrees/second, and no snap");
+    if (result.turn_speed_given && !result.controller_smooth)
+        throw std::runtime_error("Turn speed requires --controller-smooth");
     if (result.snap_angle_given && !result.controller_snap)
         throw std::runtime_error("Snap angle requires --controller-snap");
     if (result.aim_speed_percent < 10 || result.aim_speed_percent > 300 || result.aim_smoothing_ms > 250)
@@ -376,6 +392,7 @@ int input_session_control(const Options& config, HANDLE process, const std::file
     request.legacy_axis0 = config.controller_legacy_axis0 ? 1 : 0;
     request.pointing = config.controller_aim ? 1 : 0;
     request.snap_steps = config.controller_snap ? config.snap_steps : 0;
+    request.smooth_turn_speed = config.controller_smooth ? config.turn_speed : 0;
     request.aim_speed_percent = config.aim_speed_percent;
     request.aim_smoothing_ms = config.aim_smoothing_ms;
     auto base = find_module(config.pid, dll);
@@ -430,6 +447,7 @@ int input_session_control(const Options& config, HANDLE process, const std::file
               << ",\"cancel_suppressed\":" << request.cancel_suppressed
               << ",\"cursor_calls\":" << request.cursor_calls << ",\"aim_applied\":" << request.aim_applied
               << ",\"recenter_count\":" << request.recenter_count
+              << ",\"smooth_turn_speed\":" << request.smooth_turn_speed
               << ",\"snap_angle\":" << request.snap_steps * 22.5
               << ",\"snap_enabled\":" << ((request.enabled && request.snap_steps) ? "true" : "false")
               << ",\"turn_calls\":" << request.turn_calls << ",\"turn_applied\":" << request.turn_applied
@@ -456,6 +474,7 @@ int wmain(int argc, wchar_t** argv) {
                L"  --controller-session start|stop|enable|disable|status; start accepts --controller-aim; start requires --log ABSOLUTE_PATH or --no-log.\n"
                L"  --controller-trace [--controller-move] [--controller-aim | --controller-aim-trace] bounded input test.\n"
                L"  --controller-snap [--snap-angle 22.5|45|90] for capture/session start; --controller-snap-trace for passive capture.\n"
+               L"  --controller-smooth [--turn-speed 30..180] for controller session start; default 60 degrees/second.\n"
                L"  Pointing session tuning: --aim-speed-percent 10..300 (default 60), --aim-smoothing-ms 0..250 (default 80).\n"
                L"  --controller-legacy-axis0 explicitly accepts the observed shared stick/trackpad compatibility axis.\n";
         return argc == 1 ? 1 : 0;

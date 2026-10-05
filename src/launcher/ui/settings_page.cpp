@@ -27,10 +27,17 @@ void Window::create_settings_page() {
     smooth_value = make(L"STATIC", L"80 ms", ControlId::smoothing_value, SS_RIGHT, Page::settings);
     label(L"More smoothing reduces jitter and adds a little delay.", ControlId::smoothing_help,
           Page::settings);
-    label(L"Snap turning", ControlId::snap_label, Page::settings);
+    label(L"Turning", ControlId::snap_label, Page::settings);
     snap = make(L"COMBOBOX", L"", ControlId::snap_choice, CBS_DROPDOWNLIST | WS_TABSTOP, Page::settings);
-    for (const auto* value : {L"Off", L"22.5 degrees", L"45 degrees", L"90 degrees"})
+    for (const auto* value :
+         {L"Off", L"Snap 22.5 degrees", L"Snap 45 degrees", L"Snap 90 degrees", L"Smooth"})
         SendMessageW(snap, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(value));
+    label(L"Smooth turn speed", ControlId::turn_speed_label, Page::settings);
+    turn_speed = make(TRACKBAR_CLASSW, L"", ControlId::turn_speed_slider, TBS_HORZ | TBS_NOTICKS | WS_TABSTOP,
+                      Page::settings);
+    SendMessageW(turn_speed, TBM_SETRANGE, TRUE, MAKELPARAM(30, 180));
+    SendMessageW(turn_speed, TBM_SETPAGESIZE, 0, 10);
+    turn_speed_value = make(L"STATIC", L"60 deg/s", ControlId::turn_speed_value, SS_RIGHT, Page::settings);
     label(L"Controller type", ControlId::controller_label, Page::settings);
     controller = make(L"COMBOBOX", L"", ControlId::controller_choice,
                       CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS | WS_TABSTOP, Page::settings);
@@ -41,8 +48,8 @@ void Window::create_settings_page() {
     label(L"Off by default; logs are limited to 2 MiB each.", ControlId::logging_help, Page::settings);
     make(L"BUTTON", L"Save settings", ControlId::save, WS_TABSTOP, Page::settings);
     make(L"BUTTON", L"Reset defaults", ControlId::defaults, WS_TABSTOP, Page::settings);
-    label(L"Speeds update live. Other changes briefly restart the affected fixes.", ControlId::settings_help,
-          Page::settings);
+    label(L"Cursor speeds update live. Other changes briefly restart the affected fixes.",
+          ControlId::settings_help, Page::settings);
 }
 
 void Window::layout_settings_page(int width) {
@@ -61,24 +68,29 @@ void Window::layout_settings_page(int width) {
     place(control(ControlId::smoothing_help), 204, 222, width - 228, 25);
     place(control(ControlId::snap_label), 32, 264, 168, 26);
     place(snap, 204, 258, 230, 160);
-    place(control(ControlId::controller_label), 32, 298, 168, 26);
-    place(controller, 204, 292, 230, 160);
-    place(logging, 32, 336, 160, 26);
-    place(control(ControlId::logging_help), 204, 338, width - 228, 26);
-    place(control(ControlId::save), 32, 378, 148, 32);
-    place(control(ControlId::defaults), 192, 378, 142, 32);
-    place(control(ControlId::settings_help), 32, 422, width - 64, 36);
+    place(control(ControlId::turn_speed_label), 32, 298, 168, 26);
+    place(turn_speed, 204, 292, width - 324, 32);
+    place(turn_speed_value, width - 104, 298, 80, 26);
+    place(control(ControlId::controller_label), 32, 332, 168, 26);
+    place(controller, 204, 326, 230, 160);
+    place(logging, 32, 370, 160, 26);
+    place(control(ControlId::logging_help), 204, 372, width - 228, 26);
+    place(control(ControlId::save), 32, 412, 148, 32);
+    place(control(ControlId::defaults), 192, 412, 142, 32);
+    place(control(ControlId::settings_help), 32, 456, width - 64, 36);
 }
 
 void Window::fill_settings(const Settings& settings) {
     SendMessageW(stick, TBM_SETPOS, TRUE, settings.stick_speed);
     SendMessageW(motion, TBM_SETPOS, TRUE, settings.motion_speed);
     SendMessageW(smooth, TBM_SETPOS, TRUE, settings.smoothing_ms);
-    const int index = settings.snap_steps == 0   ? 0
+    const int index = settings.smooth_turn       ? 4
+                      : settings.snap_steps == 0 ? 0
                       : settings.snap_steps == 1 ? 1
                       : settings.snap_steps == 2 ? 2
                                                  : 3;
     SendMessageW(snap, CB_SETCURSEL, index, 0);
+    SendMessageW(turn_speed, TBM_SETPOS, TRUE, settings.smooth_turn_speed);
     SendMessageW(controller, CB_SETCURSEL, 0, 0);
     SendMessageW(logging, BM_SETCHECK, settings.logging ? BST_CHECKED : BST_UNCHECKED, 0);
     update_values();
@@ -90,7 +102,9 @@ Settings Window::settings() const {
     settings.motion_speed = static_cast<int>(SendMessageW(motion, TBM_GETPOS, 0, 0));
     settings.smoothing_ms = static_cast<int>(SendMessageW(smooth, TBM_GETPOS, 0, 0));
     const int index = static_cast<int>(SendMessageW(snap, CB_GETCURSEL, 0, 0));
-    settings.snap_steps = index == 0 ? 0 : index == 1 ? 1 : index == 2 ? 2 : 4;
+    settings.snap_steps = index == 1 ? 1 : index == 2 ? 2 : index == 3 ? 4 : 0;
+    settings.smooth_turn = index == 4;
+    settings.smooth_turn_speed = static_cast<int>(SendMessageW(turn_speed, TBM_GETPOS, 0, 0));
     settings.controller = ControllerType::knuckles;
     settings.logging = SendMessageW(logging, BM_GETCHECK, 0, 0) == BST_CHECKED;
     return settings;
@@ -101,5 +115,8 @@ void Window::update_values() {
     SetWindowTextW(stick_value, (std::to_wstring(settings.stick_speed) + L"%").c_str());
     SetWindowTextW(motion_value, (std::to_wstring(settings.motion_speed) + L"%").c_str());
     SetWindowTextW(smooth_value, (std::to_wstring(settings.smoothing_ms) + L" ms").c_str());
+    SetWindowTextW(turn_speed_value, (std::to_wstring(settings.smooth_turn_speed) + L" deg/s").c_str());
+    for (const auto control : {turn_speed, turn_speed_value, this->control(ControlId::turn_speed_label)})
+        EnableWindow(control, settings.smooth_turn);
 }
 } // namespace witness::launcher

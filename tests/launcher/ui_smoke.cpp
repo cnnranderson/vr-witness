@@ -43,6 +43,9 @@ void Window::ui_smoke_tick() {
             auto settings = this->settings();
             settings.stick_speed = 35;
             settings.motion_speed = 70;
+            settings.smooth_turn = true;
+            settings.snap_steps = 0;
+            settings.smooth_turn_speed = 90;
             fill_settings(settings);
             command(ControlId::save);
             ++smoke_step;
@@ -50,9 +53,14 @@ void Window::ui_smoke_tick() {
         }
         if (smoke_step == 1) {
             const auto saved = load_settings(root);
-            if (saved.stick_speed != 35 || saved.motion_speed != 70)
+            if (saved.stick_speed != 35 || saved.motion_speed != 70 || !saved.smooth_turn ||
+                saved.snap_steps != 0 || saved.smooth_turn_speed != 90 || !IsWindowEnabled(turn_speed))
                 throw std::runtime_error("UI save settings check failed");
             capture(smoke_output / L"status.bmp");
+            TabCtrl_SetCurSel(tabs, 1);
+            fit_page();
+            layout();
+            capture(smoke_output / L"smooth-settings.bmp");
             command(ControlId::defaults);
             command(ControlId::save);
             TabCtrl_SetCurSel(tabs, 1);
@@ -66,7 +74,7 @@ void Window::ui_smoke_tick() {
             ++smoke_step;
             return;
         }
-        if (!(load_settings(root) == Settings{}))
+        if (!(load_settings(root) == Settings{}) || IsWindowEnabled(turn_speed))
             throw std::runtime_error("UI reset defaults check failed");
         KillTimer(window, 1);
         RECT rect{};

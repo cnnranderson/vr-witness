@@ -18,8 +18,20 @@ __declspec(noinline) witness::input::Axis game_cursor() {
     return out;
 }
 
+__declspec(noinline) void game_vr_rotations() {
+    // Model the native 22.5-degree rounding at all three rotation consumers.
+    constexpr float step = 3.14159265358979323846f / 8.f;
+    const auto rounded = std::nearbyint(TestInputVrYaw / step) * step;
+    TestInputRotation(fixture_rotations[0], 0, 0, 1, rounded);
+    TestInputRotation(fixture_rotations[1], 0, 0, 1, rounded);
+    TestInputRotation(fixture_rotations[2], 0, 0, 1, rounded);
+    volatile auto observed = fixture_rotations[2][3];
+    (void)observed;
+}
+
 __declspec(noinline) void game_vr_update() {
     TestInputVrUpdate();
+    game_vr_rotations();
     // Keep a real call/return address even in optimized builds.
     volatile auto observed = fixture_seen_yaw;
     (void)observed;
@@ -35,6 +47,10 @@ int wmain(int argc, wchar_t** argv) {
     TestInputPoll();
     if (!wcscmp(argv[1], L"--height"))
         return check_height_hook();
+    if (!wcscmp(argv[1], L"--trigger"))
+        return check_trigger_hook();
+    if (!wcscmp(argv[1], L"--smooth"))
+        return check_smooth_turn_hook();
     witness::Handle stop(CreateEventW(nullptr, TRUE, FALSE, argv[1]));
     const auto legacy_name = std::wstring(argv[1]) + L"-Legacy";
     witness::Handle legacy(CreateEventW(nullptr, TRUE, FALSE, legacy_name.c_str()));
@@ -105,8 +121,6 @@ int wmain(int argc, wchar_t** argv) {
             ++navigation_leaks;
         const auto result = game_move();
         const unsigned p = TestInputPhase();
-        if (!fixture_trigger_pressed)
-            ++key_leaks;
         if (!fixture_pad_pressed &&
             ((p >= 10 && p < 60) || (p >= 70 && p < 110) || (p >= 120 && p < 140) || (p >= 150 && p < 170) ||
              (p >= 180 && p < 200) || (p >= 210 && p < 220) || p >= 230)) {
@@ -115,6 +129,9 @@ int wmain(int argc, wchar_t** argv) {
             if (!puzzle(c) && !c.menu)
                 ++key_leaks;
         }
+        TestInputKey(nullptr, 0x135, true);
+        if (!fixture_trigger_pressed)
+            ++key_leaks;
         TestInputKey(nullptr, 0x136, true);
         if (!fixture_pad_pressed)
             ++key_leaks; // unrelated caller

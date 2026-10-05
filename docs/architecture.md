@@ -15,7 +15,7 @@ their callbacks retain the native game's VR ownership and simulation timing.
 | `src/launcher/resources/` | Windows manifest, icon resource, and version template |
 | `src/loader/main.cpp` | Target validation, remote calls, and diagnostic/session CLI |
 | `src/input/module.cpp` | Native input hooks, sample publication, and input session lifecycle |
-| `src/input/*.hpp` | Controller state, movement, pointing, stick cursor, snap, buttons, and menu latches |
+| `src/input/*.hpp` | Controller state, movement, pointing, stick cursor, turning, buttons, and menu latches |
 | `src/render/module.cpp` | Deferred eye submissions, paused redraw repair, and render session lifecycle |
 | `src/game/build_validation.hpp` | Executable fingerprint and live instruction guards |
 | `src/common/` | Wire protocol, handle ownership, paths, bounded logs, and caller addresses |
@@ -66,11 +66,11 @@ All exports use the Windows x64 ABI and return a `DWORD`: zero is success; nonze
 | `WitnessSessionControl` | `SessionRequest` | Start, stop, enable, disable or query the render session |
 | `WitnessInputSessionControl` | `InputSessionRequest` | Control the input session and return its active settings/counters |
 
-Requests include their exact byte size and protocol version. `ProbeRequest` is 2064 bytes, `SessionRequest` is 2104, and `InputSessionRequest` is 2208. Static assertions enforce these layouts. Diagnostics use protocol 1; render sessions use protocol 2; input sessions use protocol 7. Field order, widths, exported names and calling conventions are compatibility boundaries.
+Requests include their exact byte size and protocol version. `ProbeRequest` is 2064 bytes, `SessionRequest` is 2104, and `InputSessionRequest` is 2208. Static assertions enforce these layouts. Diagnostics use protocol 1; render sessions use protocol 2; input sessions use protocol 8. Field order, widths, exported names and calling conventions are compatibility boundaries.
 
 Zero-initialize requests, then populate required fields. Diagnostic duration is capped at 30,000 ms. Diagnostics require an absolute, null-terminated UTF-16 log path within the 1024-character buffer. Sessions also accept an empty path to disable logging (`--no-log`); `logging` reports the requested session setting. The loader creates a unique path and refuses overwriting an existing log.
 
-Session calls update their request buffer in place with state, enabled/fault flags and counters. Input calls require valid `aim_speed_percent` (10..300) and `aim_smoothing_ms` (0..250) even for status. `stick_speed_percent` must be zero on input and reports the active value on return. `height_calibrated`, `height_m` and `height_offset_m` must also be zero on input; they report the process's calibration and signed offset in meters. The input DLL validates the size/version header before copying the full request, rejecting older, smaller requests. Input start consumes `legacy_axis0`, `pointing` and `snap_steps`; 0/1/2/4 snap steps mean off/22.5/45/90 degrees.
+Session calls update their request buffer in place with state, enabled/fault flags and counters. Input calls require valid `aim_speed_percent` (10..300) and `aim_smoothing_ms` (0..250) even for status. `stick_speed_percent` must be zero on input and reports the active value on return. `height_calibrated`, `height_m` and `height_offset_m` must also be zero on input; they report the process's calibration and signed offset in meters. The input DLL validates the size/version header before copying the full request, rejecting older versions and incorrect sizes. Input start consumes `legacy_axis0`, `pointing` and `snap_steps`; 0/1/2/4 snap steps mean off/22.5/45/90 degrees. `smooth_turn_speed` at offset 2204 uses former tail padding: zero disables smooth turning, otherwise 30..180 degrees/second with `snap_steps` zero. The version changed despite the unchanged byte size.
 
 `ProbeRequest.reserved` is a DLL-specific diagnostic selector:
 
@@ -90,10 +90,12 @@ Input math headers do not call the game or Windows. `Hand` represents a role-sel
 - `Pointing::update` returns whether its delta may replace native cursor input; the output is not usable on failure.
 - `AimCalibration::update` returns true when a fresh, non-drawing A press recalibrates; `disarm` retains the rotation while requiring a new release.
 - `SnapTurn::update` returns -1, 0 or +1 and requires neutral between turns.
+- `SmoothTurn::update` integrates horizontal stick deflection into a yaw delta in radians; invalid contexts, device changes and gaps over 100 ms require neutral. A separate caller-scoped axis-angle hook removes native VR rounding only in smooth mode, including when menus or puzzles block new input.
+- `TriggerButton::update` returns a held state after release, retaining a hold across puzzle entry and drawing; device, menu and focus changes rearm it.
 - `BButton::update` returns one allowed press edge after release. Left B toggles pause; right B cancels puzzles or goes back in menus.
 - `MenuStick::update` produces native D-pad pulses only in an open menu, after neutral. Hold repeat starts at 350 ms and repeats every 150 ms. Each event uses a complete native press/release pair on the game input thread.
 
-Time arguments are monotonic milliseconds. Cursor positions/deltas use native cursor view units; motion/stick speeds use view widths per second. INI values are percentages and are divided by 100 at the caller. Yaw headings use radians. Projection uses the eye origin and hand orientation; it does not implement hand-position parallax.
+Time arguments are monotonic milliseconds; smooth turning retains fractional milliseconds from QueryPerformanceCounter. Cursor positions/deltas use native cursor view units; motion/stick speeds use view widths per second. INI values are percentages and are divided by 100 at the caller. Yaw headings use radians. Projection uses the eye origin and hand orientation; it does not implement hand-position parallax.
 
 Session and launcher logs use `src/common/session_log.hpp`: empty paths disable file creation; complete records stop at 2 MiB per file. Disk-write failures and reaching the cap do not stop gameplay. Bounded developer captures explicitly requested with `--log` remain diagnostic output.
 

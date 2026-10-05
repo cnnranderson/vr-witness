@@ -39,13 +39,15 @@ int setting_number(const fs::path& file, const wchar_t* key, int fallback) {
 bool Settings::operator==(const Settings& other) const {
     return stick_speed == other.stick_speed && motion_speed == other.motion_speed &&
            smoothing_ms == other.smoothing_ms && snap_steps == other.snap_steps &&
+           smooth_turn == other.smooth_turn && smooth_turn_speed == other.smooth_turn_speed &&
            controller == other.controller && logging == other.logging;
 }
 
 bool valid_settings(const Settings& settings) {
     return settings.controller == ControllerType::knuckles && settings.stick_speed >= 10 &&
            settings.stick_speed <= 300 && settings.motion_speed >= 10 && settings.motion_speed <= 300 &&
-           settings.smoothing_ms >= 0 && settings.smoothing_ms <= 250 &&
+           settings.smoothing_ms >= 0 && settings.smoothing_ms <= 250 && settings.smooth_turn_speed >= 30 &&
+           settings.smooth_turn_speed <= 180 && (!settings.smooth_turn || settings.snap_steps == 0) &&
            (settings.snap_steps == 0 || settings.snap_steps == 1 || settings.snap_steps == 2 ||
             settings.snap_steps == 4);
 }
@@ -65,6 +67,12 @@ Settings load_settings(const fs::path& root) {
         settings.smoothing_ms = smooth;
     if (snap == 0 || snap == 1 || snap == 2 || snap == 4)
         settings.snap_steps = snap;
+    settings.smooth_turn = setting_number(file, L"SmoothTurning", 0) == 1;
+    const int turn_speed = setting_number(file, L"SmoothTurnSpeed", 60);
+    if (turn_speed >= 30 && turn_speed <= 180)
+        settings.smooth_turn_speed = turn_speed;
+    if (settings.smooth_turn)
+        settings.snap_steps = 0;
     settings.logging = setting_number(file, L"DiagnosticLogging", 0) == 1;
     return settings;
 }
@@ -77,6 +85,8 @@ void save_settings(const fs::path& root, const Settings& settings) {
     write_ini(file, L"Input", L"MotionCursorSpeedPercent", std::to_wstring(settings.motion_speed));
     write_ini(file, L"Input", L"AimSmoothingMs", std::to_wstring(settings.smoothing_ms));
     write_ini(file, L"Input", L"SnapSteps", std::to_wstring(settings.snap_steps));
+    write_ini(file, L"Input", L"SmoothTurning", settings.smooth_turn ? L"1" : L"0");
+    write_ini(file, L"Input", L"SmoothTurnSpeed", std::to_wstring(settings.smooth_turn_speed));
     write_ini(file, L"Input", L"ControllerType", L"Knuckles");
     write_ini(file, L"Input", L"LegacyAxis0", L"1");
     write_ini(file, L"Input", L"DiagnosticLogging", settings.logging ? L"1" : L"0");

@@ -126,10 +126,12 @@ try {
     Start-Sleep -Milliseconds 150
     if ((Control status).applied -lt 1) { throw 'Restart failed after neutral' }
     $state = Control stop
-    $withoutLog = & $loader --controller-session start --test-host --pid $fixture.Id --no-log | ConvertFrom-Json
+    $withoutLog = & $loader --controller-session start --test-host --pid $fixture.Id --no-log --controller-smooth --turn-speed 90 | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0 -or !$withoutLog.enabled -or $withoutLog.logging) { throw 'Session without logging failed' }
+    if ($withoutLog.smooth_turn_speed -ne 90 -or $withoutLog.snap_angle -ne 0) { throw 'Smooth turning settings did not reach the input DLL' }
     Start-Sleep -Milliseconds 100
-    if ((Control status).logging) { throw 'Disabled logging status changed' }
+    $state = Control status
+    if ($state.logging -or $state.smooth_turn_speed -ne 90) { throw 'Logging or smooth turning status changed' }
     $state = Control stop
     foreach ($log in $sessionLogs) {
         $events = @(Get-Content -LiteralPath $log | ForEach-Object { $_ | ConvertFrom-Json })
@@ -147,4 +149,4 @@ try {
 if ($fixture.ExitCode -ne 0) { throw "Input session host failed (exit $($fixture.ExitCode)): $(Get-Content -LiteralPath $metrics)" }
 $actual = Get-Content -LiteralPath $metrics | ConvertFrom-Json
 if ($actual.moved -lt 5 -or $actual.aim_changed -lt 100 -or $actual.aim_leaks -ne 0 -or $actual.aim_decoy_leaks -ne 0 -or $actual.leaks -ne 0 -or $actual.decoy_leaks -ne 0) { throw "Independent input counters failed: $($actual | ConvertTo-Json -Compress)" }
-Write-Output 'Persistent input: >30s, command controls, held-stick/trigger rearm, pointing persistence and custom settings, A-button edge/drawing gates, overlap rejection, restart, bounded logging, hook restoration and host survival passed.'
+Write-Output 'Persistent input: >30s, command controls, held-stick/trigger rearm, pointing persistence and custom settings, A-button edge/drawing gates, overlap rejection, restart, smooth turning configuration, bounded logging, hook restoration and host survival passed.'

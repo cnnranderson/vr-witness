@@ -5,7 +5,7 @@
 After [setting up the compiler](development.md), create a new version:
 
 ```powershell
-.\scripts\release.ps1 -Version 0.3.0
+.\scripts\release.ps1 -Version 0.3.1
 ```
 
 The command builds Release in a fresh directory, runs all native checks,
@@ -52,18 +52,22 @@ Pushes to `main`, pull requests, and manual runs build and test without
 publishing. Their portable ZIPs and build records are temporary Actions artifacts.
 Neither the game nor a headset is needed on the runner.
 
-To publish committed changes, choose a new version tag:
+Before tagging, add `docs/releases/<tag>.md` with concise **Additions**,
+**Changes**, and **Bugfixes** sections, update instructions, known limitations, and a full changelog
+link. The [v0.3.1 notes](releases/v0.3.1.md) show the format. Commit the notes with
+the changes, then publish a new version tag:
 
 ```powershell
 git push origin main
-git tag -a v0.3 -m "The Witness VR v0.3"
-git push origin v0.3
+git tag -a v0.3.1 -m "The Witness VR v0.3.1"
+git push origin v0.3.1
 ```
 
 A `v*` tag triggers publication after successful tests. Two-part tags such as
 `v0.3` normalize to package version `0.3.0`. A suffix such as `-preview.1`
 creates a prerelease. The Release contains the ZIP and its checksum; build
-records remain in a separate Actions artifact. Existing assets are not overwritten.
+records remain in a separate Actions artifact. The matching notes file becomes
+the Release description; publication requires it. Existing assets are not overwritten.
 
 The build job has read-only permissions. The publication job has `contents: write`,
 verifies the downloaded checksum, and requires the tag to exist. Official

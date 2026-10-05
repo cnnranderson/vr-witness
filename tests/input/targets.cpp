@@ -19,6 +19,11 @@ extern "C" __declspec(dllexport) HeightFrame TestInputHeightFrame() {
 
 bool fixture_back{}, fixture_menu{}, fixture_expect_swap{}, fixture_polling{};
 unsigned native_menu_events{}, native_menu_leaks{};
+bool fixture_trigger_scenario{}, fixture_left_trigger{}, fixture_right_trigger{}, fixture_swap_roles{},
+    fixture_controllers_connected{true}, fixture_captured{}, fixture_controller_state_valid{true};
+Context fixture_trigger_context{2, true, true, false, 0, {1, 0, 0}, {0, 1, 0}};
+unsigned fixture_trigger_presses{};
+Axis fixture_right_axis{};
 
 void TestInputMenu(bool pressed, bool expect_swap) {
     fixture_menu = pressed;
@@ -88,10 +93,14 @@ bool neutral() {
 }
 
 std::uint32_t get_role(void*, int role) {
+    if (fixture_trigger_scenario)
+        return role == 1 ? (fixture_swap_roles ? 1 : 2) : (fixture_swap_roles ? 2 : 1);
     return role == 1 ? (phase() >= 210 ? 5 : 2) : ((fixture_aim || fixture_snap) && phase() >= 210 ? 3 : 1);
 }
 
 bool connected(void*, std::uint32_t device) {
+    if (fixture_trigger_scenario)
+        return device == 0 || fixture_controllers_connected;
     return device == 0 || !(phase() >= 150 && phase() < 160);
 }
 
@@ -103,6 +112,13 @@ int get_property(void*, std::uint32_t, int property, int* error) {
 bool get_state(void*, std::uint32_t device, ControllerState* state) {
     *state = {};
     state->packet = input_frame;
+    if (fixture_trigger_scenario) {
+        if (device == get_role(nullptr, 2) ? fixture_right_trigger : fixture_left_trigger)
+            state->pressed = 1ull << 33;
+        if (device == get_role(nullptr, 2))
+            state->axes[fixture_legacy ? 0 : 2] = fixture_right_axis;
+        return fixture_controller_state_valid;
+    }
     state->pressed = 1ull << 33;
     state->touched = 1ull << 32;
     if (fixture_aim && neutral())
@@ -141,7 +157,7 @@ bool get_state(void*, std::uint32_t device, ControllerState* state) {
 }
 
 bool captured(void*) {
-    return false;
+    return fixture_captured;
 }
 
 void* table[40]{};
@@ -170,7 +186,9 @@ extern "C" __declspec(dllexport) __declspec(noinline) void TestInputPoll() {
     ++native_polls;
     fixture_polling = true;
     TestInputKey(&fixture_keyboard, 0x136, !neutral());
-    TestInputKey(&fixture_keyboard, 0x135, true);
+    const bool trigger =
+        fixture_trigger_scenario ? (fixture_swap_roles ? fixture_left_trigger : fixture_right_trigger) : true;
+    TestInputKey(&fixture_keyboard, 0x135, trigger);
     TestInputKey(&fixture_keyboard, 0x13d, fixture_back);
     fixture_polling = false;
 }
@@ -183,6 +201,8 @@ extern "C" __declspec(dllexport) __declspec(noinline) Vec3* TestInputMove(Vec3* 
 }
 
 extern "C" __declspec(dllexport) Context TestInputContext() {
+    if (fixture_trigger_scenario)
+        return fixture_trigger_context;
     const auto p = phase();
     return {fixture_aim ? (p >= 40 && p < 50   ? 2
                            : p >= 20 && p < 40 ? 1
@@ -248,6 +268,22 @@ __declspec(dllexport) void* TestInputVrReturn{};
 }
 float fixture_seen_yaw{}, fixture_seen_vr_yaw{};
 unsigned native_vr_updates{};
+float fixture_rotations[3][4]{};
+extern "C" {
+__declspec(dllexport) void* TestInputRotationReturns[3]{};
+}
+
+extern "C" __declspec(dllexport) __declspec(noinline) void TestInputRotation(float* output, float x, float y,
+                                                                             float z, float angle) {
+    for (int i = 0; i < 3; ++i)
+        if (output == fixture_rotations[i] && !TestInputRotationReturns[i])
+            TestInputRotationReturns[i] = WITNESS_RETURN_ADDRESS();
+    const auto scale = std::sin(angle * .5f) / std::sqrt(x * x + y * y + z * z);
+    output[0] = x * scale;
+    output[1] = y * scale;
+    output[2] = z * scale;
+    output[3] = std::cos(angle * .5f);
+}
 
 extern "C" __declspec(dllexport) __declspec(noinline) void TestInputVrUpdate() {
     if (!TestInputVrReturn)
@@ -260,6 +296,7 @@ extern "C" __declspec(dllexport) __declspec(noinline) void TestInputVrUpdate() {
 extern "C" {
 __declspec(dllexport) void* TestInputKeyReturn{};
 __declspec(dllexport) void* TestInputMenuReturn{};
+__declspec(dllexport) void* TestInputTriggerReturn{};
 }
 bool fixture_pad_pressed{}, fixture_trigger_pressed{}, fixture_menu_pressed{};
 
@@ -284,8 +321,13 @@ extern "C" __declspec(dllexport) __declspec(noinline) void TestInputKey(void* ke
             TestInputKeyReturn = WITNESS_RETURN_ADDRESS();
         fixture_pad_pressed = pressed;
     }
-    if (key == 0x135)
+    if (key == 0x135) {
+        if (!TestInputTriggerReturn)
+            TestInputTriggerReturn = WITNESS_RETURN_ADDRESS();
+        if (pressed && !fixture_trigger_pressed)
+            ++fixture_trigger_presses;
         fixture_trigger_pressed = pressed;
+    }
     if (key == 0x13d) {
         if (!TestInputMenuReturn)
             TestInputMenuReturn = WITNESS_RETURN_ADDRESS();
