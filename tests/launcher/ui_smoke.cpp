@@ -66,7 +66,9 @@ void Window::ui_smoke_tick() {
             TabCtrl_SetCurSel(tabs, 1);
             fit_page();
             layout();
-            SendMessageW(controller, CB_SETCURSEL, 2, 0);
+            if (SendMessageW(controller, CB_GETCOUNT, 0, 0) != 2)
+                throw std::runtime_error("Controller choices must be VR and Gamepad");
+            SendMessageW(controller, CB_SETCURSEL, 1, 0);
             command(ControlId::controller_choice);
             if (SendMessageW(controller, CB_GETCURSEL, 0, 0) != 0)
                 throw std::runtime_error("Unavailable controller was selectable");
@@ -84,6 +86,23 @@ void Window::ui_smoke_tick() {
                 << " selection=" << SendMessageW(snap, CB_GETCURSEL, 0, 0) << " rect=" << rect.left << ","
                 << rect.top << "," << rect.right << "," << rect.bottom << "\n";
         capture(smoke_output / L"settings.bmp");
+        TabCtrl_SetCurSel(tabs, 2);
+        fit_page();
+        layout();
+        refresh();
+        if (TabCtrl_GetItemCount(tabs) != 3 || !IsWindowVisible(control(ControlId::controls_heading)) ||
+            IsWindowVisible(stick) || IsWindowVisible(path) || IsWindowVisible(control(ControlId::cancel)))
+            throw std::runtime_error("Controls tab visibility check failed");
+        RECT client{};
+        GetClientRect(window, &client);
+        for (const auto item : controls_widgets) {
+            GetWindowRect(item, &rect);
+            MapWindowPoints(nullptr, window, reinterpret_cast<POINT*>(&rect), 2);
+            if (rect.left < 0 || rect.right > client.right || rect.bottom > scale(footer_top()))
+                throw std::runtime_error("Control mapping extends outside the page");
+        }
+        RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+        capture(smoke_output / L"controls.bmp");
         DestroyWindow(window);
     }
 }

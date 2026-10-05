@@ -28,6 +28,7 @@ private:
     void stop_sessions();
     void begin_startup(bool launch_game);
     void inspect();
+    void game_closed();
     void attach();
     void start_game_if_needed();
     Session control(SessionKind kind, const wchar_t* action);

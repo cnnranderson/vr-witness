@@ -180,7 +180,7 @@ Session send_session_command(const fs::path& root, DWORD pid, const fs::path& ga
             args.insert(args.end(),
                         {L"--controller-aim", L"--aim-speed-percent", std::to_wstring(settings.motion_speed),
                          L"--aim-smoothing-ms", std::to_wstring(settings.smoothing_ms)});
-            if (settings.controller == ControllerType::knuckles)
+            if (settings.controller == ControllerType::vr)
                 args.push_back(L"--controller-legacy-axis0");
             if (settings.smooth_turn)
                 args.insert(args.end(), {L"--controller-smooth", L"--turn-speed",

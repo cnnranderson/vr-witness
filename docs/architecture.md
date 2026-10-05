@@ -9,7 +9,7 @@ their callbacks retain the native game's VR ownership and simulation timing.
 | Location | Responsibility |
 | --- | --- |
 | `src/launcher/main.cpp` | Application entry point and single-instance guard |
-| `src/launcher/ui/` | Window lifecycle, layout, named controls, Status and Settings pages |
+| `src/launcher/ui/` | Window lifecycle, layout, named controls, Status, Settings, and Controls pages |
 | `src/launcher/backend.*`, `backend_commands.cpp` | Worker queue, snapshots, startup, and session transitions |
 | `src/launcher/services/` | Settings persistence, Steam discovery, process utilities, readiness verification, and loader client |
 | `src/launcher/resources/` | Windows manifest, icon resource, and version template |
@@ -46,7 +46,10 @@ and clears that cache when the process or selected folder changes.
 
 `SessionKind` identifies input or rendering explicitly at the loader boundary.
 A failed loader operation marks the outcome uncertain and prevents automatic
-retry. Settings edits reload cursor speeds live; other settings restart only
+retry. Game inspection and loader calls hold a process handle through completion;
+failures allow a brief exit check before reporting an error. Confirmed process
+exit clears session state and cancels pending attachment without an error dialog.
+Settings edits reload cursor speeds live; other settings restart only
 the affected sessions, retaining a disabled state. Closing the window joins the
 worker but does not stop the game's sessions.
 

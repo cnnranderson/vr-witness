@@ -29,7 +29,7 @@ binaries requires process exit. Game files and the shipped OpenVR DLL stay uncha
 | Snap | Math, snap and smooth turning routes |
 | Render | Eye submission, pause redraw, and route-fault behavior |
 | Lifecycle | Persistent input/render sessions, stop/start, and callback lifetime |
-| Launcher | Argument quoting, Steam discovery, settings, status parsing, and bounded logs |
+| Launcher | Argument quoting, Steam discovery, settings, status parsing, process exit races, and bounded logs |
 | All | All twelve native checks |
 
 Run the affected suite during iteration and All after a completed cross-feature,
@@ -46,7 +46,8 @@ The optional UI test is a separate executable:
 
 With the game closed, this builds and runs `witness-launcher-ui-test.exe`.
 It saves and resets settings beside its own executable, verifies the result,
-captures its own two tabs under the build directory, and exits. The test window
+checks the disabled Gamepad choice, captures all three tabs under the build directory,
+and exits. The test window
 is placed off-screen. It is not included in release packages.
 
 Fixture success establishes routing and lifecycle behavior. Headset validation

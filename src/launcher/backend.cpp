@@ -69,11 +69,27 @@ void Backend::announce(const std::wstring& message, bool failure) {
 
 Session Backend::control(SessionKind kind, const wchar_t* action) {
     try {
-        return send_session_command(root_, current_.pid, current_.game_dir, current_.settings, kind, action);
+        const auto game = open_game_process(current_.pid, 0);
+        return with_running_process(game.get(), [&] {
+            return send_session_command(root_, current_.pid, current_.game_dir, current_.settings, kind,
+                                        action);
+        });
     } catch (...) {
         current_.uncertain = true;
         throw;
     }
+}
+
+void Backend::game_closed() {
+    current_.pid = 0;
+    current_.vr_ready = false;
+    current_.render = {};
+    current_.input = {};
+    current_.uncertain = false;
+    current_.pending = false;
+    pending_launch_game_ = false;
+    readiness_.reset();
+    announce(L"Game closed. Ready for another session.");
 }
 
 void Backend::inspect() {
@@ -84,34 +100,27 @@ void Backend::inspect() {
         throw std::runtime_error("Multiple Witness games are running. Close the extra instance.");
     if (games.empty()) {
         if (current_.pid)
-            announce(L"Game closed. Ready for another session.");
-        current_.pid = 0;
-        current_.vr_ready = false;
-        current_.render = {};
-        current_.input = {};
-        current_.uncertain = false;
-        readiness_.reset();
+            game_closed();
         return;
     }
-    Handle game(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, FALSE, games[0]));
-    if (!game)
-        throw win_error("Inspect game");
-    if (!same_path(process_path(game.get()), current_.game_dir / L"witness64_d3d11.exe"))
-        throw std::runtime_error(
-            "The running game is in another folder. Select its installation or close it first.");
-    if (current_.pid != games[0]) {
-        current_.uncertain = false;
-        current_.render = {};
-        current_.input = {};
-    }
-    current_.pid = games[0];
-    current_.vr_ready = false;
-    if (current_.uncertain)
-        return;
-    const auto found = readiness_.inspect(current_.pid, current_.game_dir, root_);
-    current_.vr_ready = found.vr_ready;
-    current_.render = found.render_loaded ? control(SessionKind::render, L"status") : Session{};
-    current_.input = found.input_loaded ? control(SessionKind::input, L"status") : Session{};
+    const auto game = open_game_process(games[0], PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ);
+    with_running_process(game.get(), [&] {
+        if (!same_path(process_path(game.get()), current_.game_dir / L"witness64_d3d11.exe"))
+            throw std::runtime_error(
+                "The running game is in another folder. Select its installation or close it first.");
+        if (current_.pid != games[0]) {
+            current_.uncertain = false;
+            current_.render = {};
+            current_.input = {};
+        }
+        current_.pid = games[0];
+        if (current_.uncertain)
+            return;
+        const auto found = readiness_.inspect(current_.pid, current_.game_dir, root_);
+        current_.vr_ready = found.vr_ready;
+        current_.render = found.render_loaded ? control(SessionKind::render, L"status") : Session{};
+        current_.input = found.input_loaded ? control(SessionKind::input, L"status") : Session{};
+    });
 }
 
 void Backend::run() {
@@ -146,6 +155,8 @@ void Backend::run() {
                              true);
                 }
             }
+        } catch (const ProcessExited&) {
+            game_closed();
         } catch (const std::exception& error) {
             const auto message = wide(error.what());
             // Do not automatically retry a remote operation whose target-side outcome is unknown.

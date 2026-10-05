@@ -44,7 +44,7 @@ bool Settings::operator==(const Settings& other) const {
 }
 
 bool valid_settings(const Settings& settings) {
-    return settings.controller == ControllerType::knuckles && settings.stick_speed >= 10 &&
+    return settings.controller == ControllerType::vr && settings.stick_speed >= 10 &&
            settings.stick_speed <= 300 && settings.motion_speed >= 10 && settings.motion_speed <= 300 &&
            settings.smoothing_ms >= 0 && settings.smoothing_ms <= 250 && settings.smooth_turn_speed >= 30 &&
            settings.smooth_turn_speed <= 180 && (!settings.smooth_turn || settings.snap_steps == 0) &&
@@ -87,7 +87,7 @@ void save_settings(const fs::path& root, const Settings& settings) {
     write_ini(file, L"Input", L"SnapSteps", std::to_wstring(settings.snap_steps));
     write_ini(file, L"Input", L"SmoothTurning", settings.smooth_turn ? L"1" : L"0");
     write_ini(file, L"Input", L"SmoothTurnSpeed", std::to_wstring(settings.smooth_turn_speed));
-    write_ini(file, L"Input", L"ControllerType", L"Knuckles");
+    write_ini(file, L"Input", L"ControllerType", L"VR");
     write_ini(file, L"Input", L"LegacyAxis0", L"1");
     write_ini(file, L"Input", L"DiagnosticLogging", settings.logging ? L"1" : L"0");
 }

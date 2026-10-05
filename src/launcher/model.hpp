@@ -6,7 +6,7 @@
 namespace witness::launcher {
 namespace fs = std::filesystem;
 
-enum class ControllerType { knuckles, xbox360, steam_frame };
+enum class ControllerType { vr, gamepad };
 
 struct Settings {
     int stick_speed{20};  // Percent of view width per second.
@@ -15,7 +15,7 @@ struct Settings {
     int snap_steps{1}; // 0 disables snapping; 1/2/4 select 22.5/45/90 degrees.
     bool smooth_turn{};
     int smooth_turn_speed{60}; // Degrees per second at full stick deflection.
-    ControllerType controller{ControllerType::knuckles};
+    ControllerType controller{ControllerType::vr};
     bool logging{false};
     bool operator==(const Settings& other) const;
 };

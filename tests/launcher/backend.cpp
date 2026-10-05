@@ -1,6 +1,7 @@
 #include "launcher/services/settings.hpp"
 #include "launcher/services/steam_discovery.hpp"
 #include "launcher/services/loader_client.hpp"
+#include "launcher/services/platform.hpp"
 #include "common/win_util.hpp"
 #include "common/config_path.hpp"
 #include "common/session_log.hpp"
@@ -93,6 +94,10 @@ void check_settings_round_trip(const fs::path& root) {
     settings.logging = true;
     save_settings(root, settings);
     require(load_settings(root) == settings, "settings round trip");
+    require(WritePrivateProfileStringW(L"Input", L"ControllerType", L"Knuckles",
+                                       (root / L"config/input.ini").c_str()) &&
+                load_settings(root) == settings,
+            "legacy controller choice preserves VR settings");
     settings.smooth_turn = true;
     settings.snap_steps = 0;
     settings.smooth_turn_speed = 90;
@@ -105,7 +110,7 @@ void check_settings_round_trip(const fs::path& root) {
     bad_turn.smooth_turn_speed = 181;
     require(!valid_settings(bad_turn), "invalid smooth turning speed rejected");
     auto unsupported = settings;
-    unsupported.controller = ControllerType::steam_frame;
+    unsupported.controller = ControllerType::gamepad;
     require(!valid_settings(unsupported), "unavailable controller is rejected");
     auto bad = settings;
     bad.stick_speed = 0;
@@ -187,10 +192,68 @@ void check_bounded_diagnostic_logs(const fs::path& root) {
     require(!witness::write_session_log(append_log, "overflow\n", 16) && fs::file_size(log_path) == 16,
             "append cannot exceed cap");
 }
+
+void check_process_exit_race() {
+    SECURITY_ATTRIBUTES security{sizeof(security), nullptr, TRUE};
+    witness::Handle exit_event(CreateEventW(&security, TRUE, FALSE, nullptr));
+    require(static_cast<bool>(exit_event), "create exit fixture event");
+    std::wstring command = quote_argument(witness::module_path()) + L" --exit-fixture " +
+                           std::to_wstring(reinterpret_cast<std::uintptr_t>(exit_event.get()));
+    STARTUPINFOW startup{};
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION process{};
+    require(CreateProcessW(nullptr, command.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr,
+                           nullptr, &startup, &process),
+            "start exit fixture");
+    witness::Handle child(process.hProcess), thread(process.hThread);
+    const auto game = open_game_process(process.dwProcessId, 0);
+    require(with_running_process(game.get(), [] { return 42; }) == 42, "live process result preserved");
+
+    const std::string failure = "CreateRemoteThread failed (Windows error 5)";
+    bool reported = false;
+    try {
+        with_running_process(game.get(), [&] { throw std::runtime_error(failure); });
+    } catch (const ProcessExited&) {
+        throw std::runtime_error("Live access-denied failure was hidden as process exit");
+    } catch (const std::runtime_error& error) {
+        reported = error.what() == failure;
+    }
+    require(reported, "live process failure preserved");
+
+    bool closed = false;
+    try {
+        with_running_process(game.get(), [&] {
+            require(SetEvent(exit_event.get()), "request fixture exit");
+            throw std::runtime_error(failure);
+        });
+    } catch (const ProcessExited&) {
+        closed = true;
+    }
+    require(closed, "exit during failed command is normal shutdown");
+    DWORD exit_code{};
+    require(GetExitCodeProcess(child.get(), &exit_code) && exit_code == STILL_ACTIVE,
+            "exit detection uses process signaling even with exit code 259");
+
+    bool called = false;
+    closed = false;
+    try {
+        with_running_process(game.get(), [&] { called = true; });
+    } catch (const ProcessExited&) {
+        closed = true;
+    }
+    require(closed && !called, "no remote command attempted after process exit");
+}
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
     try {
+        if (argc == 3 && std::string(argv[1]) == "--exit-fixture") {
+            witness::Handle exit_event(reinterpret_cast<HANDLE>(std::stoull(argv[2])));
+            if (WaitForSingleObject(exit_event.get(), 10000) != WAIT_OBJECT_0)
+                return 1;
+            Sleep(100); // Model teardown before the process handle becomes signaled.
+            return STILL_ACTIVE;
+        }
         const auto root = fs::path(witness::module_path()).parent_path() /
                           (L"launcher-test-" + std::to_wstring(GetCurrentProcessId()));
         check_shared_fixes_toggle();
@@ -200,6 +263,7 @@ int main() {
         check_session_status_parsing();
         check_configuration_paths(root);
         check_bounded_diagnostic_logs(root);
+        check_process_exit_race();
         std::cout << "Launcher backend checks passed.\n";
         return 0;
     } catch (const std::exception& error) {

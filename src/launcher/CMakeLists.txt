@@ -20,7 +20,7 @@ witness_target_defaults(witness-launcher-core)
 target_link_libraries(witness-launcher-core PUBLIC shell32 advapi32 bcrypt user32)
 
 set(WITNESS_LAUNCHER_UI_SOURCES)
-foreach(source main.cpp ui/window.cpp ui/window_host.cpp ui/window_layout.cpp ui/status_page.cpp ui/settings_page.cpp resources/launcher.rc)
+foreach(source main.cpp ui/window.cpp ui/window_host.cpp ui/window_layout.cpp ui/status_page.cpp ui/settings_page.cpp ui/controls_page.cpp resources/launcher.rc)
     list(APPEND WITNESS_LAUNCHER_UI_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/${source}")
 endforeach()
 set(WITNESS_LAUNCHER_UI_SOURCES "${WITNESS_LAUNCHER_UI_SOURCES}" PARENT_SCOPE)

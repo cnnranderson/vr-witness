@@ -52,5 +52,9 @@ enum class ControlId : int {
     turn_speed_value = 235,
     close_help = 241,
     hotkeys = 242,
+    controls_heading = 250,
+    controls_help = 251,
+    controls_note = 252,
+    binding_first = 300, // Two consecutive IDs per control/action row.
 };
 } // namespace witness::launcher

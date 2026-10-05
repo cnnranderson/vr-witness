@@ -5,7 +5,7 @@
 After [setting up the compiler](development.md), create a new version:
 
 ```powershell
-.\scripts\release.ps1 -Version 0.3.1
+.\scripts\release.ps1 -Version 0.4.0
 ```
 
 The command builds Release in a fresh directory, runs all native checks,
@@ -54,13 +54,13 @@ Neither the game nor a headset is needed on the runner.
 
 Before tagging, add `docs/releases/<tag>.md` with concise **Additions**,
 **Changes**, and **Bugfixes** sections, update instructions, known limitations, and a full changelog
-link. The [v0.3.1 notes](releases/v0.3.1.md) show the format. Commit the notes with
+link. The [v0.4 notes](releases/v0.4.md) show the format. Commit the notes with
 the changes, then publish a new version tag:
 
 ```powershell
 git push origin main
-git tag -a v0.3.1 -m "The Witness VR v0.3.1"
-git push origin v0.3.1
+git tag -a v0.4 -m "The Witness VR v0.4"
+git push origin v0.4
 ```
 
 A `v*` tag triggers publication after successful tests. Two-part tags such as

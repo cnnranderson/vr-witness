@@ -13,6 +13,7 @@ No installer, administrator access, or build tools are required.
 The game installation stays unchanged.
 
 CONTROLS
+The Controls tab in the launcher also lists these bindings.
 Left stick: walk.
 Right stick: turn while walking; move the puzzle cursor.
 Right trigger: activate, click, and draw.
@@ -33,7 +34,7 @@ Defaults: stick speed 20%, pointing speed 60%, smoothing 80 ms, snap 22.5 degree
 Turning supports Off, snap 22.5/45/90 degrees, or Smooth.
 Smooth turn speed: 30-180 degrees/second, default 60; scales with stick deflection.
 Turning only runs while walking; center the stick after puzzles or menus.
-Controller type: Knuckles. Xbox 360 and Steam Frame are unavailable.
+Controller type: VR. Gamepad is unavailable; current VR bindings are tested with Knuckles.
 Cursor speeds update within about one second. Other changes restart affected fixes.
 Settings are stored in config beside the launcher.
 Debug logging is off by default; each log is capped at 2 MiB.

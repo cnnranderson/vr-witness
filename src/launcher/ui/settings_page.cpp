@@ -41,7 +41,7 @@ void Window::create_settings_page() {
     label(L"Controller type", ControlId::controller_label, Page::settings);
     controller = make(L"COMBOBOX", L"", ControlId::controller_choice,
                       CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS | WS_TABSTOP, Page::settings);
-    for (const auto* value : {L"Knuckles", L"Xbox 360 (unavailable)", L"Steam Frame (unavailable)"})
+    for (const auto* value : {L"VR", L"Gamepad"})
         SendMessageW(controller, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(value));
     logging =
         make(L"BUTTON", L"Debug logging", ControlId::logging, BS_AUTOCHECKBOX | WS_TABSTOP, Page::settings);
@@ -105,7 +105,7 @@ Settings Window::settings() const {
     settings.snap_steps = index == 1 ? 1 : index == 2 ? 2 : index == 3 ? 4 : 0;
     settings.smooth_turn = index == 4;
     settings.smooth_turn_speed = static_cast<int>(SendMessageW(turn_speed, TBM_GETPOS, 0, 0));
-    settings.controller = ControllerType::knuckles;
+    settings.controller = ControllerType::vr;
     settings.logging = SendMessageW(logging, BM_GETCHECK, 0, 0) == BST_CHECKED;
     return settings;
 }

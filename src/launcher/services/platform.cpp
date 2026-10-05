@@ -2,6 +2,16 @@
 #include <fstream>
 
 namespace witness::launcher {
+Handle open_game_process(DWORD pid, DWORD access) {
+    const auto process = OpenProcess(access | SYNCHRONIZE, FALSE, pid);
+    if (!process) {
+        if (GetLastError() == ERROR_INVALID_PARAMETER)
+            throw ProcessExited{};
+        throw win_error("Open game process");
+    }
+    return Handle(process);
+}
+
 std::wstring wide(const std::string& text) {
     if (text.empty())
         return {};

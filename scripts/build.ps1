@@ -53,7 +53,7 @@ try {
             throw "UI test timed out. Inspect $uiOutput."
         }
         if ($uiProcess.ExitCode -ne 0) { throw "UI test failed. Inspect $uiOutput." }
-        foreach ($capture in 'status.bmp','settings.bmp','ui-check.txt') {
+        foreach ($capture in 'status.bmp','settings.bmp','controls.bmp','ui-check.txt') {
             if (!(Test-Path -LiteralPath (Join-Path $uiOutput $capture))) {
                 throw "UI test did not produce $capture. Inspect $uiOutput."
             }

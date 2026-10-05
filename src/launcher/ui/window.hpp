@@ -21,7 +21,7 @@ public:
 #endif
 
 private:
-    enum class Page { shared, status, settings };
+    enum class Page { shared, status, settings, controls };
     static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam);
     int scale(int value) const;
     HWND make(const wchar_t* cls, const wchar_t* text, ControlId id, DWORD style = 0,
@@ -39,6 +39,8 @@ private:
     void layout_status_page(int width);
     void create_settings_page();
     void layout_settings_page(int width);
+    void create_controls_page();
+    void layout_controls_page(int width);
     void fill_settings(const Settings& settings);
     Settings settings() const;
     void update_values();
@@ -54,7 +56,7 @@ private:
         stick_value{}, motion_value{}, smooth_value{};
     HFONT font{}, bold_font{};
     HBRUSH background{CreateSolidBrush(RGB(246, 248, 251))};
-    std::vector<HWND> status_widgets, settings_widgets, action_buttons;
+    std::vector<HWND> status_widgets, settings_widgets, controls_widgets, action_buttons;
     std::unique_ptr<Backend> backend;
     fs::path root;
     int dpi{96};

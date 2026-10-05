@@ -22,6 +22,8 @@ them running. Close the game and launcher before updating the mod.
 
 ## Controls
 
+The launcher's **Controls** tab lists the VR bindings and keyboard shortcuts.
+
 | Control | Action |
 | --- | --- |
 | Left stick | Walk |
@@ -50,11 +52,12 @@ Change values in **Settings**, then select **Save settings**.
 | Pointing smoothing | 80 ms | 0-250 ms |
 | Turning | Snap 22.5 degrees | Off, snap 22.5/45/90 degrees, smooth |
 | Smooth turn speed | 60 degrees/second | 30-180 degrees/second |
-| Controller type | Knuckles | Xbox 360 and Steam Frame unavailable |
+| Controller type | VR | Gamepad unavailable |
 | Debug logging | Off | 2 MiB limit per file |
 
 Cursor speeds update within about one second. Other changes briefly restart
 affected fixes. Settings are stored in `config` beside the launcher.
+VR uses the current Knuckles bindings; other VR controllers need validation.
 
 Smooth turning scales with stick deflection and only runs while walking.
 Center the stick after leaving a puzzle or menu to resume turning.

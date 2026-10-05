@@ -19,6 +19,8 @@ HWND Window::make(const wchar_t* cls, const wchar_t* text, ControlId id, DWORD s
         status_widgets.push_back(control);
     else if (page == Page::settings)
         settings_widgets.push_back(control);
+    else if (page == Page::controls)
+        controls_widgets.push_back(control);
     return control;
 }
 
@@ -58,9 +60,12 @@ void Window::create() {
     TabCtrl_InsertItem(tabs, 0, &item);
     item.pszText = const_cast<wchar_t*>(L"  Settings  ");
     TabCtrl_InsertItem(tabs, 1, &item);
+    item.pszText = const_cast<wchar_t*>(L"  Controls  ");
+    TabCtrl_InsertItem(tabs, 2, &item);
     create_status_page();
     create_settings_page();
-    // Shared footer stays visible on both pages.
+    create_controls_page();
+    // Shared footer stays visible on every page.
     label(L"Closing the launcher leaves attached fixes running.", ControlId::close_help, Page::shared);
     make(L"BUTTON", L"Open logs", ControlId::logs, WS_TABSTOP, Page::shared);
     label(L"F7: Calibrate height  |  Shift+F7: Game default  |  F8: Start/stop fixes", ControlId::hotkeys,
@@ -75,16 +80,19 @@ void Window::layout() {
     RECT client{};
     GetClientRect(window, &client);
     const int width = MulDiv(client.right, 96, dpi);
-    const bool settings_page = TabCtrl_GetCurSel(tabs) == 1;
+    const int page = TabCtrl_GetCurSel(tabs);
     place(tabs, 24, 16, width - 48, 32);
     layout_status_page(width);
     layout_settings_page(width);
+    layout_controls_page(width);
     for (HWND item : status_widgets)
-        ShowWindow(item, settings_page ? SW_HIDE : SW_SHOW);
+        ShowWindow(item, page == 0 ? SW_SHOW : SW_HIDE);
     for (HWND item : settings_widgets)
-        ShowWindow(item, settings_page ? SW_SHOW : SW_HIDE);
+        ShowWindow(item, page == 1 ? SW_SHOW : SW_HIDE);
+    for (HWND item : controls_widgets)
+        ShowWindow(item, page == 2 ? SW_SHOW : SW_HIDE);
     ShowWindow(control(ControlId::cancel),
-               !settings_page && backend && backend->snapshot().pending ? SW_SHOW : SW_HIDE);
+               page == 0 && backend && backend->snapshot().pending ? SW_SHOW : SW_HIDE);
     const int footer = footer_top();
     place(control(ControlId::close_help), 24, footer + 4, width - 180, 24);
     place(control(ControlId::logs), width - 148, footer, 124, 28);
@@ -92,7 +100,8 @@ void Window::layout() {
 }
 
 int Window::footer_top() const {
-    return TabCtrl_GetCurSel(tabs) == 1 ? 500 : 432;
+    const int page = TabCtrl_GetCurSel(tabs);
+    return page == 1 ? 500 : page == 2 ? 400 : 432;
 }
 
 int Window::content_height() const {
