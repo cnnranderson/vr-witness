@@ -86,6 +86,11 @@ void Window::refresh() {
     SetWindowTextW(game, snapshot.pid ? L"Running" : L"Not running");
     SetWindowTextW(vr, snapshot.vr_ready ? L"Ready" : snapshot.pid ? L"Not ready" : L"Waiting for game");
     SetWindowTextW(render, session_text(snapshot.render, snapshot.uncertain).c_str());
+    if (!snapshot.uncertain && snapshot.render.active() && snapshot.render.show_hands)
+        SetWindowTextW(render, snapshot.render.hands_fault        ? L"Active (hands unavailable)"
+                               : snapshot.render.occlusion_active ? L"Active (hands, world occlusion)"
+                               : snapshot.render.world_occlusion  ? L"Active (hands; occlusion unavailable)"
+                                                                  : L"Active (hands enabled)");
     SetWindowTextW(input, session_text(snapshot.input, snapshot.uncertain).c_str());
     SetWindowTextW(control(ControlId::height_status),
                    height_text(snapshot.input, snapshot.uncertain).c_str());

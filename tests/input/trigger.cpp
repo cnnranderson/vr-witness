@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
+#include <thread>
 
 using namespace witness;
 using namespace witness::input;
@@ -61,6 +62,30 @@ int check_trigger_hook() {
             throw std::runtime_error("Held trigger repeated its press edge");
         release();
         fixture_trigger_context.mode = 2;
+        press();
+        release();
+        fixture_right_trigger = true;
+        Sleep(125);
+        poll(false, "Held trigger activated after a stale poll gap");
+        poll(false, "Held trigger rearmed without release after a stale poll gap");
+        release();
+        press();
+        release();
+        fixture_right_trigger = true;
+        fixture_poll_delay_ms = 125; // Model WaitGetPoses blocking inside the original native poll.
+        poll(false, "Held trigger activated after waiting inside the native poll");
+        fixture_poll_delay_ms = 0;
+        poll(false, "Held trigger rearmed without release after the native wait");
+        release();
+        press();
+        release();
+        fixture_right_trigger = true;
+        std::thread changed_thread([] { TestInputPoll(); });
+        changed_thread.join();
+        if (fixture_trigger_pressed)
+            throw std::runtime_error("Held trigger activated after changing poll threads");
+        poll(false, "Held trigger activated when returning to the original poll thread");
+        release();
         press();
         fixture_trigger_context.focused = false;
         poll(false, "Trigger leaked without game focus");

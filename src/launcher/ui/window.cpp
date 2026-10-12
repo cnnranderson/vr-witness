@@ -3,6 +3,7 @@
 #include <shellapi.h>
 #include <algorithm>
 #ifdef WITNESS_UI_TEST
+#include "launcher/services/settings.hpp"
 #include <fstream>
 #endif
 
@@ -16,8 +17,15 @@ Window::~Window() {
 }
 
 void Window::send(Action action, fs::path folder) {
+#ifdef WITNESS_UI_TEST
+    // UI tests exercise settings conversion and persistence without starting a game/session worker.
+    if (action != Action::apply || !folder.empty())
+        throw std::runtime_error("UI fixtures cannot send game or session commands");
+    save_settings(root, settings());
+#else
     if (backend && !backend->request({action, std::move(folder), settings()}))
         MessageBeep(MB_OK);
+#endif
 }
 
 void Window::browse() {
@@ -69,6 +77,8 @@ void Window::command(ControlId id) {
         dirty = true;
         break;
     case ControlId::logging:
+    case ControlId::puzzle_reposition:
+    case ControlId::show_hands:
         dirty = true;
         break;
     case ControlId::logs:

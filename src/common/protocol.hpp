@@ -23,7 +23,7 @@ static_assert(sizeof(ProbeRequest) == 2064);
 
 enum class SessionCommand : std::uint32_t { start = 1, stop, enable, disable, status };
 enum class SessionState : std::uint32_t { stopped, running, stopping, failed };
-inline constexpr std::uint32_t kSessionProtocolVersion = 2;
+inline constexpr std::uint32_t kSessionProtocolVersion = 4;
 
 // Start accepts an absolute log_path or an empty path to disable logging.
 // State, enabled, fault and counters are response fields.
@@ -39,12 +39,25 @@ struct SessionRequest {
     std::uint64_t fallback;
     std::uint32_t logging; // Response: session logging was requested.
     wchar_t log_path[kPathCapacity];
+    alignas(8) std::uint32_t show_hands; // Start option and status: optional controller-tracked hands.
+    std::uint32_t hands_fault;           // Response: hand rendering failed independently of VR fixes.
+    std::uint64_t hand_draws;            // Response: completed hand draw calls in this session.
+    std::uint32_t world_occlusion;       // Start option and status: experimental hand/world depth testing.
+    std::uint32_t occlusion_active;      // Response: latest hand draw used world depth.
+    std::uint64_t occlusion_draws;       // Response: hand draws completed with world depth.
 };
 
-static_assert(sizeof(SessionRequest) == 2104);
+static_assert(offsetof(SessionRequest, log_path) == 52);
+static_assert(offsetof(SessionRequest, show_hands) == 2104);
+static_assert(offsetof(SessionRequest, hands_fault) == 2108);
+static_assert(offsetof(SessionRequest, hand_draws) == 2112);
+static_assert(offsetof(SessionRequest, world_occlusion) == 2120);
+static_assert(offsetof(SessionRequest, occlusion_active) == 2124);
+static_assert(offsetof(SessionRequest, occlusion_draws) == 2128);
+static_assert(sizeof(SessionRequest) == 2136);
 
 // Input protocol versions independently of the render protocol.
-inline constexpr std::uint32_t kInputProtocolVersion = 8;
+inline constexpr std::uint32_t kInputProtocolVersion = 9;
 
 // Zero-initialize, set size/version/command, and supply valid speed/smoothing values for every command.
 // Start consumes feature options/log_path; state, counters and active settings are returned in place.
@@ -78,13 +91,17 @@ struct InputSessionRequest {
     alignas(8) std::uint32_t height_calibrated;
     float height_m;
     float height_offset_m;
-    std::uint32_t smooth_turn_speed; // 0 disables smooth turning; otherwise 30..180 degrees/second.
+    std::uint32_t smooth_turn_speed;          // 0 disables smooth turning; otherwise 30..180 degrees/second.
+    std::uint32_t disable_puzzle_reposition;  // Start option: 0 preserves native panel-entry approach.
+    std::uint64_t puzzle_repositions_blocked; // Response: suppressed approaches in this session.
 };
 
 static_assert(offsetof(InputSessionRequest, log_path) == 140);
 static_assert(offsetof(InputSessionRequest, height_calibrated) == 2192);
 static_assert(offsetof(InputSessionRequest, smooth_turn_speed) == 2204);
-static_assert(sizeof(InputSessionRequest) == 2208);
+static_assert(offsetof(InputSessionRequest, disable_puzzle_reposition) == 2208);
+static_assert(offsetof(InputSessionRequest, puzzle_repositions_blocked) == 2216);
+static_assert(sizeof(InputSessionRequest) == 2224);
 
 enum class ProbeResult : DWORD {
     success = 0,

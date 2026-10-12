@@ -43,6 +43,22 @@ height and offset in meters, with an inactive indication when suspended.
 Native fixture coverage cannot verify world scale or stereo alignment; this
 feature needs a headset check. It does not correct puzzle-entry repositioning.
 
+## Optional puzzle positioning
+
+Automatic puzzle positioning is on by default. Turning it off suppresses verified
+native panel-approach requests after their setup, using the game's own completion
+routine. It applies to subsequent eligible entries and linked-panel navigation;
+it does not undo an existing approach or maintain a compensating camera offset.
+Normal walking, tracked head movement, puzzle input, and other approach modes
+retain their native paths. Disabling the input fixes also restores native approach
+behavior. Re-enabling the setting takes effect when entering again.
+
+This is an experimental preference, not a replacement for required puzzle
+viewpoints. Some perspective puzzles may become harder to view or interact with
+when it is off. It covers the verified common panel approach routes, not every
+scripted movement or special panel update. Both directions of the setting and
+panel interaction need headset validation.
+
 ## Planned puzzle presentation
 
 Some perspective puzzles may need a fixed camera or a mono view. These modes
@@ -65,6 +81,15 @@ presentation work must preserve native simulation timing and render correct
 per-eye views; a final swapchain Present hook alone cannot supply stereo.
 
 ## Validation boundary
+
+Optional controller-driven glove hands are available through **Show hands**,
+off by default. They use tracked controller position and orientation relative
+to the HMD, with controller-specific palm attachment and mirrored glove bases.
+Holding grip closes each glove; release reopens it. This does not change puzzle cursor aiming.
+Hands hide during menus and invalid tracking. They have self-occlusion;
+the unsuccessful world-occlusion experiment is hidden from the launcher in v0.4.0.
+The developer-only candidate native-depth path remains available for investigation. See
+[tracked hands](tracked-hands.md) for evidence and remaining headset validation.
 
 Native fixtures verify hook routing, latches, and lifetime. They cannot establish
 world scale, visual alignment, comfort, or complete puzzle playability. Validate

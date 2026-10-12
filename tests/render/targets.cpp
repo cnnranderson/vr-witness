@@ -19,6 +19,8 @@ std::atomic<unsigned> menu_calls{0};
 std::atomic<unsigned> after_menu{0};
 int current_eye = -1;
 std::atomic<bool> fixture_paused{false};
+std::atomic<unsigned> hands_calls{0}, hands_bad_stage{0}, hands_bad_eye{0};
+bool fixture_hands_result = true, fixture_cursor_inside_begin = false;
 
 extern "C" __declspec(dllexport) __declspec(noinline) bool TestPaused() {
     // The host primes this once via its render-query wrapper before injection.
@@ -47,7 +49,20 @@ extern "C" __declspec(dllexport) __declspec(noinline) bool TestBeginEye(int eye)
     current_eye = eye;
     TestRenderState.current_target = TestRenderState.eye_targets[eye];
     TestSubmit(eye);
+    if (fixture_cursor_inside_begin) {
+        TestCursor(nullptr, nullptr, false);
+        stage = 1;
+    }
     return true;
+}
+
+extern "C" __declspec(dllexport) __declspec(noinline) bool TestDrawHands(int eye) {
+    ++hands_calls;
+    if (stage != 1)
+        ++hands_bad_stage;
+    if (eye < 0 || eye > 1 || eye != current_eye)
+        ++hands_bad_eye;
+    return fixture_hands_result;
 }
 
 extern "C" __declspec(dllexport) __declspec(noinline) void TestCursor(void*, void*, bool) {

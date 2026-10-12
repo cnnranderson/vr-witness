@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <filesystem>
 #include <string>
+#include <cstdint>
 
 namespace witness::launcher {
 namespace fs = std::filesystem;
@@ -14,7 +15,9 @@ struct Settings {
     int smoothing_ms{80};
     int snap_steps{1}; // 0 disables snapping; 1/2/4 select 22.5/45/90 degrees.
     bool smooth_turn{};
-    int smooth_turn_speed{60}; // Degrees per second at full stick deflection.
+    int smooth_turn_speed{60};       // Degrees per second at full stick deflection.
+    bool puzzle_repositioning{true}; // Native panel approach; changes apply to subsequent entries.
+    bool show_hands{};               // Experimental controller-tracked hand rendering.
     ControllerType controller{ControllerType::vr};
     bool logging{false};
     bool operator==(const Settings& other) const;
@@ -26,10 +29,17 @@ struct Session {
     bool enabled{};
     bool fault{};
     bool logging{};
+    bool show_hands{};
+    bool hands_fault{};
+    std::uint64_t hand_draws{};
+    bool world_occlusion{};
+    bool occlusion_active{};
+    std::uint64_t occlusion_draws{};
     int motion_speed{};
     int smoothing_ms{};
     int snap_steps{};
     int smooth_turn_speed{}; // Zero when smooth turning is disabled.
+    bool puzzle_repositioning{true};
     bool legacy_axis{};
     bool height_calibrated{};
     float height_m{}, height_offset_m{};

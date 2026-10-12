@@ -3,6 +3,7 @@
 #include "common/fixes_toggle.hpp"
 #include "game/build_validation.hpp"
 #include "render/snapshot.hpp"
+#include "render/hands_native.hpp"
 #include "common/win_util.hpp"
 #include "common/caller_address.hpp"
 #include <MinHook.h>
@@ -45,6 +46,14 @@ std::atomic<bool> busy{false}, defer_enabled{false};
 std::atomic<bool> defer_until_menu{false};
 std::atomic<bool> redraw_paused_scene{false};
 std::atomic<std::uint64_t> paused_scene_redraws{0};
+std::atomic<bool> show_hands{false}, hands_fault{false}, world_occlusion{false};
+std::atomic<std::uint64_t> hand_draws{0};
+// A single bounded GPU cache lives until process exit. Native D3D may use a
+// SINGLETHREADED device: worker-side COM destruction is unsafe even after our
+// callbacks drain, because native rendering continues. No static destructor.
+witness::hands::NativeHands* native_hands{};
+using FixtureHands = bool (*)(int);
+FixtureHands fixture_hands{};
 std::atomic<bool> detailed{false}, route_fault{false}, session_stop{false};
 std::atomic<witness::SessionState> session_state{witness::SessionState::stopped};
 SRWLOCK control_lock = SRWLOCK_INIT;
@@ -52,6 +61,7 @@ bool session_logging{};
 HANDLE session_thread{};
 std::atomic<unsigned> active{0}, active_submit{0}, pending_count{0}, event_count{0};
 thread_local bool inside_begin = false;
+thread_local bool hand_attempted = false;
 thread_local int last_eye = -1, pending_eye = -1;
 std::uintptr_t game_image_base{};
 const witness::RenderSnapshot* fixture_render_state{};
@@ -170,6 +180,10 @@ bool hooked_begin(int eye) {
     // If the selected completion point was skipped, preserve frame delivery.
     flush_pending(submit_fallback);
     last_eye = eye;
+    hand_attempted = false;
+    if (show_hands.load() && !hands_fault.load() && defer_enabled.load() && !route_fault.load() &&
+        native_hands)
+        native_hands->begin_eye(eye);
     record(begin_eye, eye);
     inside_begin = true;
     const bool result = original_begin(eye);
@@ -195,6 +209,21 @@ void hooked_submit(int eye) {
 void hooked_cursor(void* cursor, void* view, bool alternate) {
     Active guard;
     record(cursor_enter, last_eye);
+    // Scene copy has completed. Draw once into this pending eye, before native
+    // cursor/menu rendering and before the final native resolve/submission.
+    if (show_hands.load() && !hands_fault.load() && defer_enabled.load() && !route_fault.load() &&
+        !inside_begin && pending_eye >= 0 && pending_eye == last_eye && !hand_attempted) {
+        hand_attempted = true;
+        using witness::hands::DrawResult;
+        const auto result = fixture_hands
+                                ? (fixture_hands(last_eye) ? DrawResult::drawn : DrawResult::skipped)
+                            : native_hands ? native_hands->draw(last_eye, view)
+                                           : DrawResult::failed;
+        if (result == DrawResult::drawn)
+            hand_draws.fetch_add(1, std::memory_order_relaxed);
+        else if (result == DrawResult::failed || result == DrawResult::unsupported)
+            hands_fault.store(true);
+    }
     original_cursor(cursor, view, alternate);
     record(cursor_exit, last_eye);
     // Always drain a pending eye, even after the timed experiment is stopped.
@@ -247,6 +276,8 @@ void validate_targets(HMODULE self) {
         render_pause_caller = caller ? *caller : nullptr;
         fixture_render_state =
             reinterpret_cast<const witness::RenderSnapshot*>(GetProcAddress(main, "TestRenderState"));
+        fixture_hands =
+            reinterpret_cast<FixtureHands>(reinterpret_cast<void*>(GetProcAddress(main, "TestDrawHands")));
         if (!begin_site || !submit_site || !cursor_site || !menu_site || !fixture_render_state ||
             !paused_site || !render_pause_caller)
             throw std::runtime_error("Owned fixture exports missing");
@@ -358,6 +389,15 @@ bool enabled() {
     return defer_enabled.load() && !route_fault.load();
 }
 
+bool occlusion_active() {
+    return enabled() && show_hands.load() && world_occlusion.load() && !hands_fault.load() && native_hands &&
+           native_hands->occlusion_active();
+}
+
+std::uint64_t occlusion_draws() {
+    return native_hands ? native_hands->occlusion_draws() : 0;
+}
+
 std::uint64_t completed_submissions() {
     return totals[submit_after_cursor].load() + totals[submit_after_menu].load();
 }
@@ -373,6 +413,11 @@ void session_record(std::ofstream& target, const char* event) {
         << ",\"completion\":\"" << (defer_until_menu.load() ? "menu" : "cursor") << "\""
         << ",\"pause_redraw_enabled\":" << (enabled() && redraw_paused_scene.load() ? "true" : "false")
         << ",\"paused_scene_redraws\":" << paused_scene_redraws.load()
+        << ",\"show_hands\":" << (show_hands.load() ? "true" : "false")
+        << ",\"hands_fault\":" << (hands_fault.load() ? "true" : "false")
+        << ",\"world_occlusion\":" << (world_occlusion.load() ? "true" : "false")
+        << ",\"occlusion_active\":" << (occlusion_active() ? "true" : "false")
+        << ",\"occlusion_draws\":" << occlusion_draws() << ",\"hand_draws\":" << hand_draws.load()
         << ",\"fallback\":" << totals[submit_fallback].load() << "}\n";
 
     if (!log)
@@ -382,7 +427,7 @@ void session_record(std::ofstream& target, const char* event) {
 
 DWORD WINAPI session_worker(void* argument) noexcept {
     std::unique_ptr<std::ofstream> log(static_cast<std::ofstream*>(argument));
-    bool was_enabled = enabled(), was_fault = false, focused = false;
+    bool was_enabled = enabled(), was_fault = false, was_hands_fault = hands_fault.load(), focused = false;
     bool f8_was_down = true;
     auto heartbeat = GetTickCount64();
     try {
@@ -402,10 +447,12 @@ DWORD WINAPI session_worker(void* argument) noexcept {
             }
             focused = game_focused;
             f8_was_down = f8;
-            if (was_enabled != enabled() || was_fault != route_fault.load()) {
+            if (was_enabled != enabled() || was_fault != route_fault.load() ||
+                was_hands_fault != hands_fault.load()) {
                 session_record(*log, "session.changed");
                 was_enabled = enabled();
                 was_fault = route_fault.load();
+                was_hands_fault = hands_fault.load();
             }
             if (GetTickCount64() - heartbeat >= 30000) {
                 session_record(*log, "session.heartbeat");
@@ -442,10 +489,22 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessSessionControl(void* argume
     using namespace witness;
     if (!argument)
         return static_cast<DWORD>(ProbeResult::invalid_request);
+
+    // Read only the common header until the version/size are proven. Older
+    // launchers can pass a shorter allocation ending at a protected page.
+    struct Header {
+        std::uint32_t size, version;
+    } header{};
+
+    std::memcpy(&header, argument, sizeof(header));
+    if (header.size != sizeof(SessionRequest) || header.version != kSessionProtocolVersion)
+        return static_cast<DWORD>(ProbeResult::invalid_request);
     auto& response = *static_cast<SessionRequest*>(argument);
     const auto request = response;
     if (request.size != sizeof(request) || request.version != kSessionProtocolVersion ||
         request.command < SessionCommand::start || request.command > SessionCommand::status ||
+        request.show_hands > 1 || request.hands_fault || request.hand_draws || request.world_occlusion > 1 ||
+        request.occlusion_active || request.occlusion_draws ||
         std::find(std::begin(request.log_path), std::end(request.log_path), L'\0') ==
             std::end(request.log_path))
         return static_cast<DWORD>(ProbeResult::invalid_request);
@@ -473,6 +532,20 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessSessionControl(void* argume
             log = witness::open_session_log(path);
             session_logging = !path.empty();
             prepare_hooks();
+            show_hands.store(request.show_hands != 0);
+            world_occlusion.store(request.world_occlusion != 0);
+            hands_fault.store(false);
+            hand_draws.store(0);
+            if (show_hands.load() && !fixture_hands && !native_hands) {
+                try {
+                    native_hands = new witness::hands::NativeHands(game_image_base);
+                } catch (const std::exception&) {
+                    // Optional geometry must not take down the established render fixes.
+                    hands_fault.store(true);
+                }
+            }
+            if (native_hands)
+                native_hands->new_session(world_occlusion.load());
             detailed.store(false);
             // Redraw paused eyes and submit each after its cursor and stereo menu.
             defer_until_menu.store(true);
@@ -521,6 +594,12 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessSessionControl(void* argume
     response.deferred = totals[submit_deferred].load();
     response.submitted = completed_submissions();
     response.fallback = totals[submit_fallback].load();
+    response.show_hands = show_hands.load() ? 1 : 0;
+    response.hands_fault = hands_fault.load() ? 1 : 0;
+    response.hand_draws = hand_draws.load();
+    response.world_occlusion = world_occlusion.load() ? 1 : 0;
+    response.occlusion_active = occlusion_active() ? 1 : 0;
+    response.occlusion_draws = occlusion_draws();
     if (response.state == SessionState::failed)
         result = static_cast<DWORD>(ProbeResult::internal_error);
     return result;
@@ -555,6 +634,10 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessProbeRun(void* argument) no
         if (!log)
             return static_cast<DWORD>(ProbeResult::cannot_open_log);
         prepare_hooks();
+        show_hands.store(false);
+        world_occlusion.store(false);
+        hands_fault.store(false);
+        hand_draws.store(0);
         detailed.store(true);
         defer_until_menu.store(request.reserved >= 2);
         redraw_paused_scene.store(request.reserved == 3);

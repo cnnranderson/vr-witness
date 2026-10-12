@@ -9,24 +9,22 @@ After [setting up the compiler](development.md), create a new version:
 ```
 
 The command builds Release in a fresh directory, runs all native checks,
-verifies source files did not change during the build, and packages only the
-tested binaries. Existing versions are never overwritten. Outputs:
+and packages the tested build. Finish editing before running it. Existing
+versions are never overwritten. Outputs:
 
 - `out/releases/WitnessVR-<version>.zip`: complete portable package.
 - `out/releases/WitnessVR-<version>/`: extracted runnable copy.
-- `out/releases/WitnessVR-<version>.zip.sha256`: archive checksum.
-- `out/release-records/WitnessVR-<version>/`: local source/build manifests,
-  binary hashes, and test results.
+- `out/release-records/WitnessVR-<version>/`: local tool versions and test results.
 
 `package.ps1` is the lower-level packaging step. It requires a matching passed
-release record and unchanged tested binaries. Its explicit allowlist includes
+release record. Its explicit allowlist includes
 only the launcher, loader, two runtime DLLs, clean defaults, README, and licenses.
 Test hosts, tools, game files, captures, and local settings are excluded.
 
 Compiler runtimes are linked statically; runtime imports are Windows system
-DLLs. Source and binary hashes identify inputs and detect changes, but do not
-make the build byte-for-byte deterministic or provide a digital signature.
-Keep the matching source commit for every release.
+DLLs. Packages are unsigned and are not guaranteed byte-for-byte deterministic.
+Keep the matching source commit for every release. No separate checksum files
+or source hash manifests are generated.
 
 ## Package layout
 
@@ -65,12 +63,12 @@ git push origin v0.4
 
 A `v*` tag triggers publication after successful tests. Two-part tags such as
 `v0.3` normalize to package version `0.3.0`. A suffix such as `-preview.1`
-creates a prerelease. The Release contains the ZIP and its checksum; build
+creates a prerelease. The Release contains the ZIP; build
 records remain in a separate Actions artifact. The matching notes file becomes
 the Release description; publication requires it. Existing assets are not overwritten.
 
-The build job has read-only permissions. The publication job has `contents: write`,
-verifies the downloaded checksum, and requires the tag to exist. Official
+The build job has read-only permissions. The publication job has `contents: write`
+and requires the tag to exist. Official
 actions are pinned to commits. The cached compiler archive is reverified before
 extraction. Packages expire from Actions storage after 14 days and build records
 after 7 days; published Release assets are separate.

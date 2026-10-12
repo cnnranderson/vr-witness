@@ -1,12 +1,12 @@
 # Binary/export names are part of the loader protocol and package contract.
 add_library(witness-probe SHARED diagnostics/module_probe.cpp)
-add_library(witness-render-probe SHARED render/module.cpp)
+add_library(witness-render-probe SHARED render/module.cpp render/hands_native.cpp render/hands_draw.cpp)
 add_library(witness-input-probe SHARED input/module.cpp)
 foreach(target witness-probe witness-render-probe witness-input-probe)
     witness_target_defaults(${target})
     set_target_properties(${target} PROPERTIES PREFIX "")
 endforeach()
-target_link_libraries(witness-render-probe PRIVATE minhook bcrypt user32)
+target_link_libraries(witness-render-probe PRIVATE minhook bcrypt user32 d3d11)
 target_link_libraries(witness-input-probe PRIVATE minhook bcrypt user32)
 
 add_executable(witness-probe-loader loader/main.cpp)

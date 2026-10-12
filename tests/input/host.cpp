@@ -37,6 +37,13 @@ __declspec(noinline) void game_vr_update() {
     (void)observed;
 }
 
+__declspec(noinline) void game_puzzle_approach(void* player, void* target, int mode, float duration,
+                                               float turn_scale, int flag6, int flag7, int flag8) {
+    TestInputApproach(player, target, mode, duration, turn_scale, flag6, flag7, flag8);
+    volatile auto observed = fixture_approach_calls;
+    (void)observed;
+}
+
 int wmain(int argc, wchar_t** argv) {
     if (argc != 2)
         return 2;
@@ -44,6 +51,10 @@ int wmain(int argc, wchar_t** argv) {
     game_move();
     game_cursor();
     game_vr_update();
+    initialize_approach_fixture();
+    // Prime the same caller used by the tests, without a release-only constant-argument clone.
+    auto* volatile approach = &game_puzzle_approach;
+    approach(&fixture_approach_player, &fixture_approach_target, 1, .75f, .625f, 3, 5, 7);
     TestInputPoll();
     if (!wcscmp(argv[1], L"--height"))
         return check_height_hook();
@@ -51,6 +62,10 @@ int wmain(int argc, wchar_t** argv) {
         return check_trigger_hook();
     if (!wcscmp(argv[1], L"--smooth"))
         return check_smooth_turn_hook();
+    if (!wcscmp(argv[1], L"--cursor-fallback"))
+        return check_cursor_fallback_hook();
+    if (!wcscmp(argv[1], L"--puzzle-reposition"))
+        return check_puzzle_reposition_hook();
     witness::Handle stop(CreateEventW(nullptr, TRUE, FALSE, argv[1]));
     const auto legacy_name = std::wstring(argv[1]) + L"-Legacy";
     witness::Handle legacy(CreateEventW(nullptr, TRUE, FALSE, legacy_name.c_str()));

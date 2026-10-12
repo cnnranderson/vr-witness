@@ -13,6 +13,8 @@ int wmain(int argc, wchar_t** argv) {
     if (argc != 2)
         return 2;
     render_pause_query(); // Prime the exact render caller before any injection.
+    if (!wcscmp(argv[1], L"--hands"))
+        return check_hands_hook();
     witness::Handle stop(CreateEventW(nullptr, TRUE, FALSE, argv[1]));
     const auto skip_name = std::wstring(argv[1]) + L"-SkipCursor";
     witness::Handle skip(CreateEventW(nullptr, TRUE, FALSE, skip_name.c_str()));
@@ -55,6 +57,8 @@ int wmain(int argc, wchar_t** argv) {
               << ",\"outside\":" << outside.load() << ",\"menu_calls\":" << menu_calls.load()
               << ",\"after_menu\":" << after_menu.load() << ",\"paused_redraws\":" << paused_redraws
               << ",\"paused_skips\":" << paused_skips << ",\"pause_leaks\":" << pause_leaks
-              << ",\"unpaused_skips\":" << unpaused_skips << "}\n";
+              << ",\"unpaused_skips\":" << unpaused_skips << ",\"hands_calls\":" << hands_calls.load()
+              << ",\"hands_bad_stage\":" << hands_bad_stage.load()
+              << ",\"hands_bad_eye\":" << hands_bad_eye.load() << "}\n";
     return submissions.load() && cursors.load() ? 0 : 4;
 }

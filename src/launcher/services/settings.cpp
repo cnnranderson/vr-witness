@@ -40,7 +40,8 @@ bool Settings::operator==(const Settings& other) const {
     return stick_speed == other.stick_speed && motion_speed == other.motion_speed &&
            smoothing_ms == other.smoothing_ms && snap_steps == other.snap_steps &&
            smooth_turn == other.smooth_turn && smooth_turn_speed == other.smooth_turn_speed &&
-           controller == other.controller && logging == other.logging;
+           puzzle_repositioning == other.puzzle_repositioning && controller == other.controller &&
+           show_hands == other.show_hands && logging == other.logging;
 }
 
 bool valid_settings(const Settings& settings) {
@@ -74,6 +75,8 @@ Settings load_settings(const fs::path& root) {
     if (settings.smooth_turn)
         settings.snap_steps = 0;
     settings.logging = setting_number(file, L"DiagnosticLogging", 0) == 1;
+    settings.puzzle_repositioning = setting_number(file, L"PuzzleRepositioning", 1) != 0;
+    settings.show_hands = setting_number(file, L"ShowHands", 0) == 1;
     return settings;
 }
 
@@ -87,6 +90,10 @@ void save_settings(const fs::path& root, const Settings& settings) {
     write_ini(file, L"Input", L"SnapSteps", std::to_wstring(settings.snap_steps));
     write_ini(file, L"Input", L"SmoothTurning", settings.smooth_turn ? L"1" : L"0");
     write_ini(file, L"Input", L"SmoothTurnSpeed", std::to_wstring(settings.smooth_turn_speed));
+    write_ini(file, L"Input", L"PuzzleRepositioning", settings.puzzle_repositioning ? L"1" : L"0");
+    write_ini(file, L"Input", L"ShowHands", settings.show_hands ? L"1" : L"0");
+    // Retire the preview preference; old configuration must not enable the experiment.
+    write_ini(file, L"Input", L"HandWorldOcclusion", L"0");
     write_ini(file, L"Input", L"ControllerType", L"VR");
     write_ini(file, L"Input", L"LegacyAxis0", L"1");
     write_ini(file, L"Input", L"DiagnosticLogging", settings.logging ? L"1" : L"0");

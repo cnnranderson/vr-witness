@@ -15,12 +15,15 @@ struct Options {
     std::filesystem::path log;
     bool test_host = false;
     bool no_log = false;
+    bool show_hands = false;
+    bool world_occlusion = false;
     bool render_trace = false;
     bool defer_cursor = false;
     bool defer_menu = false;
     bool redraw_pause = false;
     bool controller_trace = false, controller_move = false, controller_legacy_axis0 = false;
     bool controller_session = false;
+    bool disable_puzzle_reposition = false;
     bool controller_aim = false, controller_aim_trace = false;
     bool controller_snap = false, controller_snap_trace = false, snap_angle_given = false;
     unsigned snap_steps = 1;
@@ -46,6 +49,18 @@ Options options(int argc, wchar_t** argv) {
         const std::wstring name = argv[i];
         if (name == L"--no-log") {
             result.no_log = true;
+            continue;
+        }
+        if (name == L"--hands") {
+            result.show_hands = true;
+            continue;
+        }
+        if (name == L"--hand-occlusion") {
+            result.world_occlusion = true;
+            continue;
+        }
+        if (name == L"--no-puzzle-reposition") {
+            result.disable_puzzle_reposition = true;
             continue;
         }
         if (name == L"--controller-legacy-axis0") {
@@ -151,6 +166,12 @@ Options options(int argc, wchar_t** argv) {
             "Smooth turning requires session start, 30..180 degrees/second, and no snap");
     if (result.turn_speed_given && !result.controller_smooth)
         throw std::runtime_error("Turn speed requires --controller-smooth");
+    if (result.disable_puzzle_reposition && (!result.controller_session || result.session != L"start"))
+        throw std::runtime_error("Puzzle positioning is set at controller session start only");
+    if (result.show_hands && (result.controller_session || result.session != L"start"))
+        throw std::runtime_error("Hands are set at cursor session start only");
+    if (result.world_occlusion && (result.controller_session || result.session != L"start"))
+        throw std::runtime_error("Hand occlusion is set at cursor session start only");
     if (result.snap_angle_given && !result.controller_snap)
         throw std::runtime_error("Snap angle requires --controller-snap");
     if (result.aim_speed_percent < 10 || result.aim_speed_percent > 300 || result.aim_smoothing_ms > 250)
@@ -326,6 +347,8 @@ int session_control(const Options& config, HANDLE process, const std::filesystem
     SessionRequest request{};
     request.size = sizeof(request);
     request.version = kSessionProtocolVersion;
+    request.show_hands = config.show_hands ? 1 : 0;
+    request.world_occlusion = config.world_occlusion ? 1 : 0;
     request.command = config.session == L"start"     ? SessionCommand::start
                       : config.session == L"stop"    ? SessionCommand::stop
                       : config.session == L"enable"  ? SessionCommand::enable
@@ -372,6 +395,12 @@ int session_control(const Options& config, HANDLE process, const std::filesystem
     std::cout << "{\"state\":\"" << state << "\",\"enabled\":" << (request.enabled ? "true" : "false")
               << ",\"logging\":" << (request.logging ? "true" : "false")
               << ",\"fault\":" << (request.fault ? "true" : "false")
+              << ",\"show_hands\":" << (request.show_hands ? "true" : "false")
+              << ",\"hands_fault\":" << (request.hands_fault ? "true" : "false")
+              << ",\"hand_draws\":" << request.hand_draws
+              << ",\"world_occlusion\":" << (request.world_occlusion ? "true" : "false")
+              << ",\"occlusion_active\":" << (request.occlusion_active ? "true" : "false")
+              << ",\"occlusion_draws\":" << request.occlusion_draws
               << ",\"loaded\":true,\"deferred\":" << request.deferred
               << ",\"submitted\":" << request.submitted << ",\"fallback\":" << request.fallback << "}\n";
     if (result)
@@ -393,6 +422,7 @@ int input_session_control(const Options& config, HANDLE process, const std::file
     request.pointing = config.controller_aim ? 1 : 0;
     request.snap_steps = config.controller_snap ? config.snap_steps : 0;
     request.smooth_turn_speed = config.controller_smooth ? config.turn_speed : 0;
+    request.disable_puzzle_reposition = config.disable_puzzle_reposition ? 1 : 0;
     request.aim_speed_percent = config.aim_speed_percent;
     request.aim_smoothing_ms = config.aim_smoothing_ms;
     auto base = find_module(config.pid, dll);
@@ -448,6 +478,8 @@ int input_session_control(const Options& config, HANDLE process, const std::file
               << ",\"cursor_calls\":" << request.cursor_calls << ",\"aim_applied\":" << request.aim_applied
               << ",\"recenter_count\":" << request.recenter_count
               << ",\"smooth_turn_speed\":" << request.smooth_turn_speed
+              << ",\"puzzle_repositioning\":" << (request.disable_puzzle_reposition ? "false" : "true")
+              << ",\"puzzle_repositions_blocked\":" << request.puzzle_repositions_blocked
               << ",\"snap_angle\":" << request.snap_steps * 22.5
               << ",\"snap_enabled\":" << ((request.enabled && request.snap_steps) ? "true" : "false")
               << ",\"turn_calls\":" << request.turn_calls << ",\"turn_applied\":" << request.turn_applied
@@ -470,8 +502,10 @@ int wmain(int argc, wchar_t** argv) {
                L"  --defer-cursor experimentally delays scene-eye submission until after cursor drawing.\n"
                L"  --defer-menu experimentally delays scene-eye submission until after its stereo menu pass.\n"
                L"  --redraw-pause experimentally redraws paused scenes and submits after the stereo menu.\n"
-               L"  --cursor-session start|stop|enable|disable|status; start requires --log ABSOLUTE_PATH or --no-log.\n"
+               L"  --cursor-session start|stop|enable|disable|status; start accepts --hands and requires --log ABSOLUTE_PATH or --no-log.\n"
+               L"  --hand-occlusion requests experimental world occlusion for enabled hands at cursor session start.\n"
                L"  --controller-session start|stop|enable|disable|status; start accepts --controller-aim; start requires --log ABSOLUTE_PATH or --no-log.\n"
+               L"  --no-puzzle-reposition disables automatic panel approach on controller session start.\n"
                L"  --controller-trace [--controller-move] [--controller-aim | --controller-aim-trace] bounded input test.\n"
                L"  --controller-snap [--snap-angle 22.5|45|90] for capture/session start; --controller-snap-trace for passive capture.\n"
                L"  --controller-smooth [--turn-speed 30..180] for controller session start; default 60 degrees/second.\n"

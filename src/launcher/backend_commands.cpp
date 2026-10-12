@@ -91,6 +91,7 @@ void Backend::apply_settings(const Settings& settings) {
          current_.input.snap_steps != current_.settings.snap_steps ||
          current_.input.smooth_turn_speed !=
              (current_.settings.smooth_turn ? current_.settings.smooth_turn_speed : 0) ||
+         current_.input.puzzle_repositioning != current_.settings.puzzle_repositioning ||
          !current_.input.legacy_axis || current_.input.logging != current_.settings.logging)) {
         const bool enabled = current_.input.enabled;
         current_.input = control(SessionKind::input, L"stop");
@@ -101,13 +102,14 @@ void Backend::apply_settings(const Settings& settings) {
     } else
         announce(L"Settings saved. Active cursor speeds update within about one second.");
     if (!current_.uncertain && current_.render.state == L"running" &&
-        current_.render.logging != current_.settings.logging) {
+        (current_.render.logging != current_.settings.logging ||
+         current_.render.show_hands != current_.settings.show_hands || current_.render.world_occlusion)) {
         const bool enabled = current_.render.enabled;
         current_.render = control(SessionKind::render, L"stop");
         current_.render = control(SessionKind::render, L"start");
         if (!enabled)
             current_.render = control(SessionKind::render, L"disable");
-        announce(L"Logging setting applied. VR fixes restarted; release the controls.");
+        announce(L"Render settings applied. VR fixes restarted; release the controls.");
     }
 }
 

@@ -1,6 +1,9 @@
 #include "launcher/ui/window.hpp"
 #include "common/win_util.hpp"
 #include <algorithm>
+#ifdef WITNESS_UI_TEST
+#include "launcher/services/settings.hpp"
+#endif
 
 namespace witness::launcher {
 
@@ -25,7 +28,8 @@ HWND Window::make(const wchar_t* cls, const wchar_t* text, ControlId id, DWORD s
 }
 
 void Window::place(HWND control, int x, int y, int width, int height) {
-    MoveWindow(control, scale(x), scale(y), scale(width), scale(height), TRUE);
+    // Repaint once after every child has reached its final position.
+    MoveWindow(control, scale(x), scale(y), scale(width), scale(height), FALSE);
 }
 
 HWND Window::control(ControlId id) const {
@@ -47,7 +51,7 @@ void Window::create() {
         const int available =
             monitor.rcWork.bottom - monitor.rcWork.top - (bounds.bottom - bounds.top - client.bottom);
         // Fit the tallest page on the current display.
-        dpi = std::min(dpi, std::max(72, MulDiv(available, 96, 580)));
+        dpi = std::min(dpi, std::max(72, MulDiv(available, 96, 676)));
     }
     font = CreateFontW(-scale(15), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 0, 0,
                        CLEARTYPE_QUALITY, 0, L"Segoe UI");
@@ -70,8 +74,12 @@ void Window::create() {
     make(L"BUTTON", L"Open logs", ControlId::logs, WS_TABSTOP, Page::shared);
     label(L"F7: Calibrate height  |  Shift+F7: Game default  |  F8: Start/stop fixes", ControlId::hotkeys,
           Page::shared);
+#ifdef WITNESS_UI_TEST
+    fill_settings(load_settings(root));
+#else
     backend = std::make_unique<Backend>(root, window);
     fill_settings(backend->snapshot().settings);
+#endif
     layout();
     refresh();
 }
@@ -97,11 +105,13 @@ void Window::layout() {
     place(control(ControlId::close_help), 24, footer + 4, width - 180, 24);
     place(control(ControlId::logs), width - 148, footer, 124, 28);
     place(control(ControlId::hotkeys), 24, footer + 38, width - 48, 24);
+    // Resizing can preserve old footer pixels; child moves alone do not erase every exposed area.
+    RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
 }
 
 int Window::footer_top() const {
     const int page = TabCtrl_GetCurSel(tabs);
-    return page == 1 ? 500 : page == 2 ? 400 : 432;
+    return page == 1 ? 596 : page == 2 ? 400 : 432;
 }
 
 int Window::content_height() const {

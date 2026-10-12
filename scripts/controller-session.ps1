@@ -9,6 +9,8 @@ Initial motion speed (10..300 percent of view width/s); a valid config/input.ini
 Motion smoothing time in milliseconds; applies at session start.
 .PARAMETER TurnSpeed
 Smooth turning speed in degrees per second; requires start -Smooth.
+.PARAMETER NoPuzzleReposition
+Suppress automatic panel-entry approach on subsequent entries; requires start.
 .EXAMPLE
 .\scripts\controller-session.ps1 start -GameDir 'E:\Games\The Witness' -BuildName dev -LegacyAxis0 -Aim -Snap
 #>
@@ -21,6 +23,7 @@ param(
     [switch]$Aim,
     [switch]$Snap,
     [switch]$Smooth,
+    [switch]$NoPuzzleReposition,
     [ValidateRange(30,180)][int]$TurnSpeed = 60,
     [ValidateSet('22.5','45','90')][string]$SnapAngle = '22.5',
     [ValidateRange(10,300)][int]$AimSpeed = 60,
@@ -34,6 +37,7 @@ if ($Snap -and $Smooth) { throw 'Select Snap or Smooth, not both.' }
 if ($PSBoundParameters.ContainsKey('TurnSpeed') -and (!$Smooth -or $Action -ne 'start')) { throw 'TurnSpeed requires start -Smooth.' }
 if ($PSBoundParameters.ContainsKey('SnapAngle') -and (!$Snap -or $Action -ne 'start')) { throw 'SnapAngle requires start -Snap.' }
 if ($Aim -and $Action -ne 'start') { throw 'Aim is selected at session start only.' }
+if ($NoPuzzleReposition -and $Action -ne 'start') { throw 'Puzzle positioning is selected at session start only.' }
 if ($LegacyAxis0 -and $Action -ne 'start') { throw 'LegacyAxis0 is selected at session start only.' }
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $loader = Join-Path $projectRoot "out\$BuildName\bin\witness-probe-loader.exe"
@@ -49,6 +53,7 @@ if ($Action -eq 'start') {
     if ($LegacyAxis0) { $extra += '--controller-legacy-axis0' }
     if ($Snap) { $extra += @('--controller-snap','--snap-angle',$SnapAngle) }
     if ($Smooth) { $extra += @('--controller-smooth','--turn-speed',$TurnSpeed) }
+    if ($NoPuzzleReposition) { $extra += '--no-puzzle-reposition' }
     if ($Aim) { $extra += @('--controller-aim','--aim-speed-percent',$AimSpeed,'--aim-smoothing-ms',$AimSmoothingMs) }
 }
 & $loader --controller-session $Action --pid $TargetPid --game-exe (Join-Path $GameDir 'witness64_d3d11.exe') @extra

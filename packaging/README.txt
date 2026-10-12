@@ -34,6 +34,18 @@ Defaults: stick speed 20%, pointing speed 60%, smoothing 80 ms, snap 22.5 degree
 Turning supports Off, snap 22.5/45/90 degrees, or Smooth.
 Smooth turn speed: 30-180 degrees/second, default 60; scales with stick deflection.
 Turning only runs while walking; center the stick after puzzles or menus.
+Automatic puzzle positioning is on by default. Turn it off and Save settings to
+suppress automatic panel approaches on subsequent entries and linked-panel changes.
+This is experimental: some perspective puzzles need their intended viewpoint.
+Turn it back on and re-enter if alignment or interaction becomes difficult.
+Head tracking and ordinary walking remain active. Existing movement is not undone.
+Show hands is off by default. Enable it and Save settings to display tracked
+gloves. Hold the grip button to close a glove; release to reopen it.
+SteamVR's default Index legacy binding also maps A to grip, so A can close it.
+Hands have self-occlusion but may appear over walls and puzzle panels. World
+occlusion is unavailable in this release. Hands hide in menus or when tracking
+is lost. Controller alignment, scale, and stereo placement need broader headset
+validation. These visuals do not change puzzle cursor aiming.
 Controller type: VR. Gamepad is unavailable; current VR bindings are tested with Knuckles.
 Cursor speeds update within about one second. Other changes restart affected fixes.
 Settings are stored in config beside the launcher.
@@ -57,8 +69,10 @@ If VR is not ready, check SteamVR and wake the headset. Restart a non-VR game
 through Launch VR. Errors appear in dialogs. For diagnostics, enable Debug
 logging, reproduce the issue, and select Open logs.
 Only one verified game executable is supported. Smooth turning, menu navigation,
-and height adjustment need headset validation. Forward movement on puzzle entry remains
-unresolved. Steam Frame and extended play need broader testing.
+height adjustment, and optional puzzle positioning suppression need headset validation.
+The positioning setting covers verified panel-approach routes; other scripted motion
+and special puzzle behavior can still reposition the player.
+Steam Frame and extended play need broader testing.
 The executable is unsigned.
 
 PACKAGE
@@ -68,4 +82,4 @@ config/input.ini    Default settings
 licenses/           Third-party notices
 
 The launcher creates config/launcher.ini and optional logs locally.
-The ZIP checksum beside the download is optional; build records are not required.
+Build records are not required to run the mod.

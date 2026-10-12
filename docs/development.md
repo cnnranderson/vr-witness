@@ -25,12 +25,12 @@ binaries requires process exit. Game files and the shipped OpenVR DLL stay uncha
 | Suite | Coverage |
 | --- | --- |
 | Math | Input transformations, smoothing, latches, buttons, and menu repeat |
-| Input | Math, input injection, cursor, right trigger, smooth turning and height |
+| Input | Math, input injection, cursor pose fallback, right trigger, smooth turning, height and optional panel approach suppression |
 | Snap | Math, snap and smooth turning routes |
 | Render | Eye submission, pause redraw, and route-fault behavior |
 | Lifecycle | Persistent input/render sessions, stop/start, and callback lifetime |
 | Launcher | Argument quoting, Steam discovery, settings, status parsing, process exit races, and bounded logs |
-| All | All twelve native checks |
+| All | All fourteen native checks |
 
 Run the affected suite during iteration and All after a completed cross-feature,
 loader, ABI, or lifetime change. Tests start their own fixture processes; they
@@ -45,8 +45,10 @@ The optional UI test is a separate executable:
 ```
 
 With the game closed, this builds and runs `witness-launcher-ui-test.exe`.
-It saves and resets settings beside its own executable, verifies the result,
-checks the disabled Gamepad choice, captures all three tabs under the build directory,
+The test-only UI has no backend worker or game/session actions. It saves and
+resets settings beside its own executable, verifies the result,
+checks the disabled Gamepad choice and repaint coverage on every directed tab
+transition, captures all three tabs under the build directory,
 and exits. The test window
 is placed off-screen. It is not included in release packages.
 
@@ -70,6 +72,8 @@ Both session scripts also support `stop`, `enable`, and `disable`. `-TargetPid`
 selects a process explicitly. Feature flags apply at session start. Use
 `-Smooth -TurnSpeed 60` instead of `-Snap` for smooth turning; speed is degrees
 per second (30..180). Snap and smooth modes are mutually exclusive.
+`-NoPuzzleReposition` opts out of automatic panel approach at session start;
+omitting it retains native positioning. It affects subsequent eligible requests.
 
 For a passive controller capture, omit behavior-changing flags:
 

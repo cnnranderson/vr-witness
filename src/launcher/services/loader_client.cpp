@@ -99,6 +99,15 @@ int integer(const std::string& json, const std::string& key) {
     const auto value = field(json, key);
     return value ? std::stoi(*value) : 0;
 }
+
+std::uint64_t counter(const std::string& json, const std::string& key) {
+    const auto value = field(json, key);
+    if (!value)
+        return 0;
+    if (value->empty() || value->find_first_not_of("0123456789") != std::string::npos)
+        throw std::runtime_error("Invalid loader counter: " + key);
+    return std::stoull(*value);
+}
 } // namespace
 
 std::wstring quote_argument(const std::wstring& argument) {
@@ -138,6 +147,8 @@ Session parse_session(const std::string& json, SessionKind kind) {
                              : angle && *angle == "90" ? 4
                                                        : 0;
         session.smooth_turn_speed = integer(json, "smooth_turn_speed");
+        session.puzzle_repositioning =
+            !field(json, "puzzle_repositioning") || boolean(json, "puzzle_repositioning");
         if (session.smooth_turn_speed &&
             (session.smooth_turn_speed < 30 || session.smooth_turn_speed > 180 || session.snap_steps))
             throw std::runtime_error("Invalid loader turning settings.");
@@ -151,6 +162,13 @@ Session parse_session(const std::string& json, SessionKind kind) {
                     : session.height_m != 0 || session.height_offset_m != 0)
                 throw std::runtime_error("Invalid loader height calibration.");
         }
+    } else {
+        session.show_hands = field(json, "show_hands") && boolean(json, "show_hands");
+        session.hands_fault = field(json, "hands_fault") && boolean(json, "hands_fault");
+        session.hand_draws = counter(json, "hand_draws");
+        session.world_occlusion = field(json, "world_occlusion") && boolean(json, "world_occlusion");
+        session.occlusion_active = field(json, "occlusion_active") && boolean(json, "occlusion_active");
+        session.occlusion_draws = counter(json, "occlusion_draws");
     }
     return session;
 }
@@ -176,7 +194,11 @@ Session send_session_command(const fs::path& root, DWORD pid, const fs::path& ga
         } else {
             args.push_back(L"--no-log");
         }
+        if (!input && settings.show_hands)
+            args.push_back(L"--hands");
         if (input) {
+            if (!settings.puzzle_repositioning)
+                args.push_back(L"--no-puzzle-reposition");
             args.insert(args.end(),
                         {L"--controller-aim", L"--aim-speed-percent", std::to_wstring(settings.motion_speed),
                          L"--aim-smoothing-ms", std::to_wstring(settings.smoothing_ms)});

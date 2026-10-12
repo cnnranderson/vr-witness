@@ -41,6 +41,18 @@ Press, hold and release retain native semantics; no extra click is synthesized.
 Disabling the fix restores the native route. Role changes, lost focus/tracking,
 runtime capture and menu transitions require a fresh release.
 
+The native trigger callback runs inside the original poll, before the mod
+publishes a new sample. A poll gap over 100 ms or a game-thread change therefore
+rearms the trigger inside the key callback, before consuming its latch. This
+also covers a long native `WaitGetPoses` before key dispatch. A held trigger cannot
+activate until released again. [REA wiring evidence](rea-wiring.md) records the
+callback order and the camera investigation.
+
+Manual-stick cursor ownership survives a failed controller pointing pose or
+compositor pose read while native headset tracking and the normal input gates
+remain valid. Pointing and recenter latches are disarmed separately; centering
+is still required after context loss, and A returns manual control to pointing.
+
 ## Turning
 
 Snap and smooth turning share the verified native VR-update callback and heading
@@ -99,6 +111,39 @@ Owned-process tests exercise both hands in all four directions, B hold/rearm,
 pause/resume events, unrelated key callers, and complete directional releases.
 Math checks cover the repeat interval, dominant axis, device changes and
 context rearming. These checks do not establish headset usability.
+
+## Optional panel-approach suppression
+
+The opt-in suppression detours setup at RVA `A1490`, calls it unchanged, then
+completes an eligible approach through native `A7690` before the later movement
+update can integrate it. It does not skip panel setup, replace destinations,
+scale movement, or write a compensating player/camera position.
+
+The setup signature is `void(void*, void*, int, float, float, int, int, int)`
+under the Windows x64 ABI: argument four arrives in XMM3; argument five is a float
+at entry RSP+28, with integer arguments six through eight at +30/+38/+40.
+The completion signature is `void(void*)`. All offsets here are hexadecimal.
+
+Only mode 1 from verified returns `A19B1`, `A1A34`, `A7838`, `23D1C1`, or `2456F1`
+is eligible. After original setup, the callback checks native VR, current player,
+player/panel types `62E350`/`62E670`, and the same mode and target ID at player
+`+D0/+F0`. Disabled/stopped fixes, native positioning on, failed reads,
+unrelated callers, other entities, and other modes retain the original route.
+Existing mode 2/4/5 motions and special panel update paths are outside this option.
+
+`A7690` clears approach mode and flags, preserving target IDs and player position.
+It can also call two leaf completion helpers: `294F20` reads `6208C4`; `29A760`
+writes `6208B8` and copies 16 bytes from `6304D0` to `6394D8`. Their high-level
+meaning is unresolved; retaining the native cleanup preserves these side effects.
+The complete setup/finish bodies, helper bodies, mode/target stores, type check,
+and all five call instructions are guarded before enabling the hook. Trampolines
+remain pinned; stop disables the hook and drains callbacks as for other input hooks.
+
+The session reports its preference and a `puzzle_repositions_blocked` counter.
+Fixture coverage validates mixed-argument forwarding, preserved setup effects,
+scope checks, native completion, and lifecycle. Static evidence is indexed in
+[REA wiring](rea-wiring.md); comfort, all entry paths, and perspective-dependent
+interaction still need real-game validation.
 
 ## Resting height
 

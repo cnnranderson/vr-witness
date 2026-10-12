@@ -76,6 +76,8 @@ std::atomic<std::uint64_t> turn_calls{0}, turn_applied{0}, turn_route_calls{0};
 SnapTurn snap_turn;
 SmoothTurn smooth_turn;
 std::atomic<unsigned> smooth_turn_speed{0};
+std::atomic<bool> disable_puzzle_reposition{false};
+std::atomic<std::uint64_t> puzzle_repositions_blocked{0};
 Move original_move{};
 void* poll_site{};
 void* move_site{};
@@ -111,6 +113,13 @@ EyePosition original_eye{};
 void* eye_site{};
 GetHeightFrame fixture_height{};
 RestingHeight resting_height;
+// Native x64 ABI: argument 4 is in XMM3; the fifth float and three ints are on the stack.
+using PuzzleApproach = void (*)(void*, void*, int, float, float, int, int, int);
+using FinishApproach = void (*)(void*);
+PuzzleApproach original_approach{};
+FinishApproach finish_approach{};
+void* approach_site{};
+std::array<void*, 5> approach_callers{};
 
 bool refresh_input_settings() {
     const auto read_speed = [&](const wchar_t* key, std::atomic<std::uint32_t>& setting) {
@@ -229,6 +238,33 @@ HeightFrame height_frame() {
     frame.key_down = (GetAsyncKeyState(VK_F7) & 0x8000) != 0;
     frame.reset = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
     return frame;
+}
+
+void hooked_approach(void* player, void* target, int mode, float duration, float turn_scale, int flag6,
+                     int flag7, int flag8) {
+    Active in;
+    const auto caller = WITNESS_RETURN_ADDRESS();
+    // Preserve target selection, panel setup and all arguments before completing the approach.
+    original_approach(player, target, mode, duration, turn_scale, flag6, flag7, flag8);
+    if (!enabled.load() || !allow_move.load() || !disable_puzzle_reposition.load() || mode != 1 ||
+        GetTickCount64() >= deadline.load() ||
+        std::find(approach_callers.begin(), approach_callers.end(), caller) == approach_callers.end())
+        return;
+    const auto frame = height_frame();
+    if (!frame.native_vr || !player || !target || frame.player != player)
+        return;
+    const auto actor = reinterpret_cast<std::uintptr_t>(player);
+    const auto panel = reinterpret_cast<std::uintptr_t>(target);
+    std::uintptr_t actor_type{}, panel_type{};
+    int active_mode{}, target_id{}, active_target{};
+    if (!read(actor + 8, actor_type) || actor_type != game_base + 0x62E350 || !read(panel + 8, panel_type) ||
+        panel_type != game_base + 0x62E670 || !read(actor + 0xD0, active_mode) || active_mode != 1 ||
+        !read(panel + 0x10, target_id) || !target_id || !read(actor + 0xF0, active_target) ||
+        active_target != target_id)
+        return;
+    // Use the game's completion cleanup; never write player position or headset transforms.
+    finish_approach(player);
+    ++puzzle_repositions_blocked;
 }
 
 Vec3* hooked_eye(Vec3* output, void* entity) {
@@ -372,11 +408,14 @@ void hooked_poll() {
             smooth_turn.reset();
         }
         // Reset cursor latches here too: menus can skip the cursor callback.
-        if (!puzzle(s.context) || s.captured || !s.pose_valid || !s.hands[1].valid || !allow_aim.load()) {
+        const bool cursor_context = puzzle(s.context) && !s.captured && s.hands[1].valid && allow_aim.load();
+        if (!cursor_context || !s.pose_valid) {
             pointing.reset();
-            stick_cursor.reset();
             calibration.disarm();
         }
+        // Manual axes remain usable when pose retrieval fails; native tracking still gates both routes.
+        if (!cursor_context)
+            stick_cursor.reset();
         request_back = puzzle_back.update(
             s.hands[1],
             live_system &&
@@ -524,6 +563,10 @@ void hooked_key(void* keyboard, int key, bool pressed) {
                       !method<bool (*)(void*)>(focus_slot)(system_object);
         }
         Lock lock;
+        // Native polling can block in WaitGetPoses before emitting this key. Check freshness here,
+        // before consuming the latch, rather than only before/after original_poll.
+        if (latest.thread != GetCurrentThreadId() || GetTickCount64() - latest.tick > 100)
+            right_trigger.reset();
         pressed = right_trigger.update(right, allowed && enabled.load() && allow_aim.load(), c.menu);
     }
     if (within_native_poll && caller == key_caller && key == 0x136)
@@ -635,6 +678,15 @@ void validate() {
             reinterpret_cast<void*>(GetProcAddress(main, "TestInputHeightFrame")));
         if (!eye_site || !fixture_height)
             throw std::runtime_error("Height fixture exports missing");
+        if (disable_puzzle_reposition.load()) {
+            approach_site = reinterpret_cast<void*>(GetProcAddress(main, "TestInputApproach"));
+            finish_approach = reinterpret_cast<FinishApproach>(
+                reinterpret_cast<void*>(GetProcAddress(main, "TestInputFinishApproach")));
+            const auto caller = reinterpret_cast<void**>(GetProcAddress(main, "TestInputApproachReturn"));
+            if (!approach_site || !finish_approach || !caller || !*caller)
+                throw std::runtime_error("Puzzle approach fixture exports missing");
+            approach_callers.fill(*caller);
+        }
         poll_site = reinterpret_cast<void*>(GetProcAddress(main, "TestInputPoll"));
         move_site = reinterpret_cast<void*>(GetProcAddress(main, "TestInputMove"));
         fixture_context =
@@ -698,6 +750,30 @@ void validate() {
         match(game_base, 0x241140,
               "8b052af33e00488b1553bf3e0085c0750333c0c32b420878f83b42107df34863c8488b4218488b04c8c3");
         eye_site = reinterpret_cast<void*>(game_base + 0x240FD0);
+        if (disable_puzzle_reposition.load()) {
+            // Complete setup body verifies the mixed ABI forwarding and panel setup side effects.
+            match(
+                game_base, 0xA1490,
+                "4c8bdc49895b0849896b1049897318574881ec900000008b9c24c8000000418bf8488bf1c7815802000002000000410f2973e885db0f28f30f95c04d8d4bc84d8d433088442428498d4bd8488bea49c7438800000000e8a51400008b8424d8000000f30f108424c0000000440fb68c24c8000000894424508b8424d000000089442448895c24404c8d442460f30f11442438f30f11742430488d542470488bce897c242848896c2420e8f2f8ffff488d052bd158004839450875140f57c00f2e85a00200007408488bcde8c19001004c8d9c2490000000498b5b10498b6b18498b7320410f2873f0498be35fc3");
+            match(game_base, 0xA138B, "8b471089b3d00000008983f000000083fe05740c8b83f00000008983f4000000");
+            match(game_base, 0x2456A8, "488d05a18c3e0048394108753c");
+            match(
+                game_base, 0xA7690,
+                "40534883ec208b81d0000000488bd9ffc8a9fbffffff752bf30f100554c846000f2e8108010000741ae862d81e000f57c90f2fc1720df30f108308010000e88d301f0033c0c78308010000ffff7f7f8983d0000000898358020000488983fc0000008983040100004883c4205bc3");
+            match(game_base, 0x294F20, "f30f10059cb93800c3");
+            match(game_base, 0x29A760, "0f100d695d3900f30f1105496138000f110d62ed3900c3");
+            match(game_base, 0xA19AC, "e8dffaffff");
+            match(game_base, 0xA1A2F, "e85cfaffff");
+            match(game_base, 0xA7833, "e8589cffff");
+            match(game_base, 0x23D1BC, "e8cf42e6ff");
+            match(game_base, 0x2456EC, "e89fbde5ff");
+            approach_site = reinterpret_cast<void*>(game_base + 0xA1490);
+            finish_approach = reinterpret_cast<FinishApproach>(game_base + 0xA7690);
+            approach_callers = {
+                reinterpret_cast<void*>(game_base + 0xA19B1), reinterpret_cast<void*>(game_base + 0xA1A34),
+                reinterpret_cast<void*>(game_base + 0xA7838), reinterpret_cast<void*>(game_base + 0x23D1C1),
+                reinterpret_cast<void*>(game_base + 0x2456F1)};
+        }
         match(game_base, 0x242230, "48895c24184889742420574881ec80000000488b05177e4504");
         match(game_base, 0x24226e, "488b053b834504488bd9403870210f842e03");
         match(
@@ -847,12 +923,13 @@ void set_controls(bool value) {
 
 void prepare(bool moving, bool legacy, ULONGLONG until, bool aiming = false, bool aim_trace = false,
              const AimSettings& settings = AimSettings{}, unsigned turning_steps = 0, bool turn_trace = false,
-             unsigned smooth_speed = 0) {
+             unsigned smooth_speed = 0, bool suppress_reposition = false) {
     if ((turning_steps && !valid_snap_steps(turning_steps)) ||
         (smooth_speed && (!valid_turn_speed(smooth_speed) || turning_steps)))
         throw std::runtime_error("Invalid turning settings");
     snap_steps = turning_steps;
     smooth_turn_speed = smooth_speed;
+    disable_puzzle_reposition = suppress_reposition;
     snap_capture = turning_steps != 0 || smooth_speed != 0 || turn_trace;
     allow_snap = turning_steps != 0 || smooth_speed != 0;
     if (!valid_settings(settings))
@@ -887,6 +964,9 @@ void prepare(bool moving, bool legacy, ULONGLONG until, bool aiming = false, boo
     if (smooth_turn_speed.load() && !original_rotation)
         require(MH_CreateHook(rotation_site, reinterpret_cast<void*>(&hooked_rotation),
                               reinterpret_cast<void**>(&original_rotation)));
+    if (disable_puzzle_reposition.load() && !original_approach)
+        require(MH_CreateHook(approach_site, reinterpret_cast<void*>(&hooked_approach),
+                              reinterpret_cast<void**>(&original_approach)));
     {
         Lock lock;
         latest = {};
@@ -911,6 +991,7 @@ void prepare(bool moving, bool legacy, ULONGLONG until, bool aiming = false, boo
     turn_calls = 0;
     turn_applied = 0;
     turn_route_calls = 0;
+    puzzle_repositions_blocked = 0;
     cursor_calls = 0;
     aim_applied = 0;
     pose_samples = 0;
@@ -932,6 +1013,8 @@ void prepare(bool moving, bool legacy, ULONGLONG until, bool aiming = false, boo
         require(MH_EnableHook(vr_update_site));
     if (smooth_turn_speed.load())
         require(MH_EnableHook(rotation_site));
+    if (disable_puzzle_reposition.load())
+        require(MH_EnableHook(approach_site));
     enabled = true;
 }
 
@@ -945,6 +1028,11 @@ void stop() {
     set_controls(false);
     if (!created)
         return;
+    if (original_approach) {
+        const auto r = MH_DisableHook(approach_site);
+        if (r != MH_OK && r != MH_ERROR_DISABLED)
+            require(r);
+    }
     if (original_eye) {
         const auto r = MH_DisableHook(eye_site);
         if (r != MH_OK && r != MH_ERROR_DISABLED)
@@ -1071,6 +1159,8 @@ void session_record(std::ofstream& target, const char* event) {
         << ",\"aim_smoothing_ms\":" << aim_settings.smoothing_ms << ",\"snap_steps\":" << snap_steps.load()
         << ",\"snap_enabled\":" << (enabled.load() && allow_snap.load() && snap_steps.load() != 0)
         << ",\"smooth_turn_speed\":" << smooth_turn_speed.load() << ",\"turn_calls\":" << turn_calls.load()
+        << ",\"puzzle_repositioning\":" << !disable_puzzle_reposition.load()
+        << ",\"puzzle_repositions_blocked\":" << puzzle_repositions_blocked.load()
         << ",\"turn_applied\":" << turn_applied.load() << "}\n";
 
     if (!log)
@@ -1237,6 +1327,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessInputSessionControl(void* a
         return 1;
     const auto request = response;
     if (request.height_calibrated || request.height_m != 0 || request.height_offset_m != 0 ||
+        request.disable_puzzle_reposition > 1 || request.puzzle_repositions_blocked ||
         request.command < SessionCommand::start || request.command > SessionCommand::status ||
         request.legacy_axis0 > 1 || request.pointing > 1 || request.aim_speed_percent < 10 ||
         request.aim_speed_percent > 300 || request.aim_smoothing_ms > 250 || request.stick_speed_percent ||
@@ -1272,7 +1363,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessInputSessionControl(void* a
             prepare(true, request.legacy_axis0 != 0, std::numeric_limits<ULONGLONG>::max(),
                     request.pointing != 0, false,
                     {request.aim_speed_percent / 100.f, request.aim_smoothing_ms}, request.snap_steps, false,
-                    request.smooth_turn_speed);
+                    request.smooth_turn_speed, request.disable_puzzle_reposition != 0);
             session_record(*log, "input.session.started");
             session_state = SessionState::running;
             auto* worker_log = log.release();
@@ -1320,6 +1411,8 @@ extern "C" __declspec(dllexport) DWORD WINAPI WitnessInputSessionControl(void* a
     response.cancel_suppressed = cancel_suppressed.load();
     response.snap_steps = snap_steps.load();
     response.smooth_turn_speed = smooth_turn_speed.load();
+    response.disable_puzzle_reposition = disable_puzzle_reposition.load() ? 1 : 0;
+    response.puzzle_repositions_blocked = puzzle_repositions_blocked.load();
     response.turn_calls = turn_calls.load();
     response.turn_applied = turn_applied.load();
     response.cursor_calls = cursor_calls.load();

@@ -1,11 +1,66 @@
 #include "targets.hpp"
 #include "common/caller_address.hpp"
 #include <windows.h>
+#include <limits>
 using namespace witness::input;
 unsigned input_frame{}, native_polls{};
+unsigned fixture_poll_delay_ms{};
 int fixture_player{};
 unsigned native_eye_calls{};
 HeightFrame fixture_height{&fixture_player, 1.f, 1.8f, true, true};
+
+FixtureApproachActor fixture_approach_player;
+FixtureApproachTarget fixture_approach_target;
+FixtureApproachArguments fixture_approach_arguments;
+unsigned fixture_approach_calls{}, fixture_finish_approach_calls{}, fixture_approach_side_effects{};
+bool fixture_approach_change_mode{}, fixture_approach_change_target{};
+extern "C" {
+__declspec(dllexport) void* TestInputApproachReturn{};
+}
+
+void initialize_approach_fixture() {
+    fixture_approach_player = {};
+    fixture_approach_target = {};
+    fixture_field<std::uintptr_t>(&fixture_approach_player, 8, 0x62E350);
+    fixture_field<Vec3>(&fixture_approach_player, 0x24, {1, 2, 3});
+    fixture_field<std::uintptr_t>(&fixture_approach_target, 8, 0x62E670);
+    fixture_field<int>(&fixture_approach_target, 0x10, 0x12345);
+    fixture_approach_change_mode = fixture_approach_change_target = false;
+}
+
+extern "C" __declspec(dllexport) __declspec(noinline) void TestInputApproach(void* player, void* target,
+                                                                             int mode, float duration,
+                                                                             float turn_scale, int flag6,
+                                                                             int flag7, int flag8) {
+    if (!TestInputApproachReturn)
+        TestInputApproachReturn = WITNESS_RETURN_ADDRESS();
+    ++fixture_approach_calls;
+    ++fixture_approach_side_effects;
+    fixture_approach_arguments = {player, target, mode, duration, turn_scale, flag6, flag7, flag8};
+    fixture_field<int>(player, 0xD0, fixture_approach_change_mode ? 2 : mode);
+    fixture_field<int>(player, 0xF0,
+                       fixture_field<int>(target, 0x10) + (fixture_approach_change_target ? 1 : 0));
+    fixture_field<int>(player, 0xF4, 0x3579);
+    fixture_field<int>(player, 0xFC, flag6);
+    fixture_field<int>(player, 0x100, flag7);
+    fixture_field<int>(player, 0x104, flag8);
+    fixture_field<float>(player, 0x108, duration);
+    fixture_field<int>(player, 0x258, 7);
+}
+
+extern "C" __declspec(dllexport) __declspec(noinline) void TestInputFinishApproach(void* player) {
+    ++fixture_finish_approach_calls;
+    for (const auto offset : {0xD0u, 0xFCu, 0x100u, 0x104u, 0x258u})
+        fixture_field<int>(player, offset, 0);
+    fixture_field<float>(player, 0x108, std::numeric_limits<float>::max());
+}
+
+void advance_approach_fixture(void* player) {
+    if (fixture_field<int>(player, 0xD0) == 1) {
+        const auto position = fixture_field<Vec3>(player, 0x24);
+        fixture_field<Vec3>(player, 0x24, {position.x + 3, position.y + 4, position.z + 5});
+    }
+}
 
 extern "C" __declspec(dllexport) __declspec(noinline) Vec3* TestInputEye(Vec3* output, void*) {
     ++native_eye_calls;
@@ -23,6 +78,7 @@ bool fixture_trigger_scenario{}, fixture_left_trigger{}, fixture_right_trigger{}
     fixture_controllers_connected{true}, fixture_captured{}, fixture_controller_state_valid{true};
 Context fixture_trigger_context{2, true, true, false, 0, {1, 0, 0}, {0, 1, 0}};
 unsigned fixture_trigger_presses{};
+bool fixture_hmd_connected{true}, fixture_right_pose_valid{true}, fixture_pose_read_success{true};
 Axis fixture_right_axis{};
 
 void TestInputMenu(bool pressed, bool expect_swap) {
@@ -100,7 +156,7 @@ std::uint32_t get_role(void*, int role) {
 
 bool connected(void*, std::uint32_t device) {
     if (fixture_trigger_scenario)
-        return device == 0 || fixture_controllers_connected;
+        return device == 0 ? fixture_hmd_connected : fixture_controllers_connected;
     return device == 0 || !(phase() >= 150 && phase() < 160);
 }
 
@@ -115,8 +171,11 @@ bool get_state(void*, std::uint32_t device, ControllerState* state) {
     if (fixture_trigger_scenario) {
         if (device == get_role(nullptr, 2) ? fixture_right_trigger : fixture_left_trigger)
             state->pressed = 1ull << 33;
-        if (device == get_role(nullptr, 2))
+        if (device == get_role(nullptr, 2)) {
             state->axes[fixture_legacy ? 0 : 2] = fixture_right_axis;
+            if (fixture_recenter)
+                state->pressed |= 1ull << (fixture_legacy ? 2 : 7);
+        }
         return fixture_controller_state_valid;
     }
     state->pressed = 1ull << 33;
@@ -184,6 +243,8 @@ void initialize_input_fixture() {
 
 extern "C" __declspec(dllexport) __declspec(noinline) void TestInputPoll() {
     ++native_polls;
+    if (fixture_poll_delay_ms)
+        Sleep(fixture_poll_delay_ms);
     fixture_polling = true;
     TestInputKey(&fixture_keyboard, 0x136, !neutral());
     const bool trigger =
@@ -232,6 +293,8 @@ int get_last_poses(void*, TrackedPose* poses, std::uint32_t count, TrackedPose* 
                    std::uint32_t game_count) {
     if (count != 16 || game || game_count)
         return 1;
+    if (fixture_trigger_scenario && !fixture_pose_read_success)
+        return 1;
     for (unsigned i = 0; i < count; ++i) {
         poses[i] = {};
         for (int a = 0; a < 3; ++a)
@@ -248,6 +311,8 @@ int get_last_poses(void*, TrackedPose* poses, std::uint32_t count, TrackedPose* 
         if (phase() >= 190 && phase() < 200)
             poses[i].valid = false;
     }
+    if (fixture_trigger_scenario)
+        poses[get_role(nullptr, 2)].valid = fixture_right_pose_valid;
     return 0;
 }
 

@@ -75,7 +75,6 @@ jobs:
           name: WitnessVR-${{ steps.version.outputs.version }}
           path: |
             out/releases/*.zip
-            out/releases/*.zip.sha256
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -87,7 +86,6 @@ jobs:
           name: build-records-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             out/release-records/
-            out/release-*/source-hashes.txt
             out/release-*/test-logs/
             out/release-*/Testing/Temporary/LastTest.log
             out/release-*/Testing/Temporary/LastTestsFailed.log
@@ -115,7 +113,7 @@ jobs:
           name: WitnessVR-${{ needs.build.outputs.version }}
           path: dist
 
-      - name: Publish ZIP and checksum
+      - name: Publish ZIP
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -126,11 +124,10 @@ jobs:
           set -euo pipefail
           cd dist
           archive="WitnessVR-${RELEASE_VERSION}.zip"
-          sha256sum --check --strict "${archive}.sha256"
           options=()
           if [[ "$RELEASE_VERSION" == *-* ]]; then
             options+=(--prerelease --latest=false)
           fi
-          gh release create "$RELEASE_TAG" "$archive" "${archive}.sha256" \
+          gh release create "$RELEASE_TAG" "$archive" \
             --verify-tag --title "The Witness VR ${RELEASE_TAG}" \
             --notes-file "../docs/releases/${RELEASE_TAG}.md" "${options[@]}"

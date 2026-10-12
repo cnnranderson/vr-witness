@@ -25,6 +25,8 @@ try {
     if ($state.loaded -or $state.state -ne 'stopped') { throw 'Status unexpectedly injected a DLL' }
     $state = Control start
     if ($state.state -ne 'running' -or !$state.enabled) { throw 'Session did not start' }
+    if ($state.show_hands -or $state.hands_fault -or $state.hand_draws -ne 0) { throw 'Hands must be disabled by default' }
+    if ($state.world_occlusion -or $state.occlusion_active -or $state.occlusion_draws -ne 0) { throw 'World occlusion must be disabled by default' }
     # Prove that the session survives the old diagnostic's 30-second ceiling.
     Start-Sleep -Seconds 31
     $state = Control status
@@ -69,10 +71,46 @@ try {
     $state = Control status
     if (!$state.enabled -or $state.fault) { throw 'Fresh session did not recover' }
     $state = Control stop
-    $withoutLog = & $loader --cursor-session start --test-host --pid $fixture.Id --no-log | ConvertFrom-Json
+    foreach ($arguments in @(
+        @('--cursor-session', 'status', '--hands'),
+        @('--controller-session', 'start', '--no-log', '--hands'),
+        @('--render-trace', '--hands'),
+        @('--cursor-session', 'status', '--hand-occlusion'),
+        @('--controller-session', 'start', '--no-log', '--hand-occlusion'),
+        @('--render-trace', '--hand-occlusion')
+    )) {
+        $ErrorActionPreference = 'Continue'
+        $invalid = & $loader @arguments --test-host --pid $fixture.Id 2>&1
+        $invalidExit = $LASTEXITCODE
+        $ErrorActionPreference = 'Stop'
+        if ($invalidExit -eq 0) { throw 'Hand option was accepted outside render session start' }
+    }
+    $withoutLog = & $loader --cursor-session start --test-host --pid $fixture.Id --no-log --hands --hand-occlusion | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0 -or !$withoutLog.enabled -or $withoutLog.logging) { throw 'Session without logging failed' }
+    if (!$withoutLog.show_hands) { throw 'Hands setting did not reach render session' }
+    if (!$withoutLog.world_occlusion) { throw 'Occlusion setting did not reach render session' }
     Start-Sleep -Milliseconds 100
-    if ((Control status).logging) { throw 'Disabled logging status changed' }
+    $state = Control status
+    if ($state.logging -or !$state.show_hands) { throw 'Logging or hands status changed' }
+    if (!$state.world_occlusion) { throw 'Occlusion preference did not persist in session status' }
+    if ($state.hands_fault -or $state.hand_draws -lt 2) { throw 'Enabled hands did not draw both eyes' }
+    $state = Control disable
+    if (!$state.show_hands -or !$state.world_occlusion -or $state.enabled) { throw 'Disabling fixes lost hand preferences' }
+    Start-Sleep -Milliseconds 100
+    $disabledHands = (Control status).hand_draws
+    Start-Sleep -Milliseconds 100
+    if ((Control status).hand_draws -ne $disabledHands) { throw 'Hands continued drawing while disabled' }
+    $state = Control enable
+    if (!$state.show_hands -or !$state.world_occlusion -or !$state.enabled) { throw 'Enabling fixes lost hand preferences' }
+    Start-Sleep -Milliseconds 100
+    if ((Control status).hand_draws -le $disabledHands) { throw 'Hands did not resume after enabling' }
+    $state = Control stop
+    $occlusionOnly = & $loader --cursor-session start --test-host --pid $fixture.Id --no-log --hand-occlusion | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0 -or !$occlusionOnly.world_occlusion -or $occlusionOnly.show_hands -or $occlusionOnly.occlusion_active -or $occlusionOnly.occlusion_draws -ne 0) { throw 'Occlusion without visible hands did not remain inactive' }
+    $state = Control stop
+    $state = Control start
+    if ($state.show_hands -or $state.hands_fault -or $state.hand_draws -ne 0) { throw 'Hands defaults were not restored on restart' }
+    if ($state.world_occlusion -or $state.occlusion_active -or $state.occlusion_draws -ne 0) { throw 'Occlusion defaults were not restored on restart' }
     $state = Control stop
     foreach ($log in $sessionLogs) {
         $events = @(Get-Content -LiteralPath $log | ForEach-Object { $_ | ConvertFrom-Json })
@@ -95,4 +133,5 @@ if (!$fixture.HasExited -or $fixture.ExitCode -ne 0) { throw 'Session host exit 
 $actual = Get-Content -LiteralPath $metrics | ConvertFrom-Json
 if ($actual.before_cursor -lt 5 -or $actual.after_menu -lt 100 -or $actual.outside -lt 5) { throw 'Independent host submission counters failed' }
 if ($actual.paused_redraws -lt 100 -or $actual.paused_skips -lt 5 -or $actual.pause_leaks -ne 0 -or $actual.unpaused_skips -ne 0) { throw 'Persistent pause override was missing, failed restoration, or affected other callers' }
-Write-Output 'Cursor/pause session: duration >30s, scoped pause redraw, command controls, overlap refusal, skipped-menu fault, restart, bounded logs, and clean exit passed.'
+if ($actual.hands_calls -lt 2 -or $actual.hands_bad_stage -ne 0 -or $actual.hands_bad_eye -ne 0) { throw 'Hands drew into the wrong eye or after the cursor' }
+Write-Output 'Cursor/pause session: duration >30s, scoped pause redraw, hand draw routing/lifecycle, command controls, overlap refusal, skipped-menu fault, restart, bounded logs, and clean exit passed.'

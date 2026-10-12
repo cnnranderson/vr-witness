@@ -31,6 +31,7 @@ try {
     $state = Control start
     if ($state.state -ne 'running' -or !$state.enabled -or !$state.legacy_axis0) { throw 'Input session did not start' }
     if (!$state.pointing -or !$state.aim_enabled -or $state.aim_speed_percent -ne 60 -or $state.aim_smoothing_ms -ne 100) { throw 'Pointing settings missing' }
+    if (!$state.puzzle_repositioning -or $state.puzzle_repositions_blocked -ne 0) { throw 'Default puzzle positioning changed' }
     Start-Sleep -Seconds 2
     $aim.Set() | Out-Null
     Start-Sleep -Seconds 31
@@ -126,12 +127,17 @@ try {
     Start-Sleep -Milliseconds 150
     if ((Control status).applied -lt 1) { throw 'Restart failed after neutral' }
     $state = Control stop
-    $withoutLog = & $loader --controller-session start --test-host --pid $fixture.Id --no-log --controller-smooth --turn-speed 90 | ConvertFrom-Json
+    $withoutLog = & $loader --controller-session start --test-host --pid $fixture.Id --no-log --controller-smooth --turn-speed 90 --no-puzzle-reposition | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0 -or !$withoutLog.enabled -or $withoutLog.logging) { throw 'Session without logging failed' }
     if ($withoutLog.smooth_turn_speed -ne 90 -or $withoutLog.snap_angle -ne 0) { throw 'Smooth turning settings did not reach the input DLL' }
+    if ($withoutLog.puzzle_repositioning -or $withoutLog.puzzle_repositions_blocked -ne 0) { throw 'Puzzle positioning setting did not reach the input DLL' }
     Start-Sleep -Milliseconds 100
     $state = Control status
     if ($state.logging -or $state.smooth_turn_speed -ne 90) { throw 'Logging or smooth turning status changed' }
+    if ($state.puzzle_repositioning) { throw 'Puzzle positioning preference did not survive status query' }
+    $state = Control stop
+    $state = Control start
+    if (!$state.puzzle_repositioning) { throw 'Native puzzle positioning was not restored on restart' }
     $state = Control stop
     foreach ($log in $sessionLogs) {
         $events = @(Get-Content -LiteralPath $log | ForEach-Object { $_ | ConvertFrom-Json })

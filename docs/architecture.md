@@ -17,6 +17,8 @@ their callbacks retain the native game's VR ownership and simulation timing.
 | `src/input/module.cpp` | Native input hooks, sample publication, and input session lifecycle |
 | `src/input/*.hpp` | Controller state, movement, pointing, stick cursor, turning, buttons, and menu latches |
 | `src/render/module.cpp` | Deferred eye submissions, paused redraw repair, and render session lifecycle |
+| `src/render/hands_native.*`, `hands_math.hpp` | Verified native VR interfaces, coherent stereo hand poses, and controller-to-eye transforms |
+| `src/render/hands_draw.*`, `hand_mesh_data.hpp` | Embedded gloves, private depth, D3D11.1 state isolation, and resource ownership |
 | `src/game/build_validation.hpp` | Executable fingerprint and live instruction guards |
 | `src/common/` | Wire protocol, handle ownership, paths, bounded logs, and caller addresses |
 | `src/diagnostics/module_probe.cpp` | Bounded module inventory; no input or rendering behavior |
@@ -69,11 +71,44 @@ All exports use the Windows x64 ABI and return a `DWORD`: zero is success; nonze
 | `WitnessSessionControl` | `SessionRequest` | Start, stop, enable, disable or query the render session |
 | `WitnessInputSessionControl` | `InputSessionRequest` | Control the input session and return its active settings/counters |
 
-Requests include their exact byte size and protocol version. `ProbeRequest` is 2064 bytes, `SessionRequest` is 2104, and `InputSessionRequest` is 2208. Static assertions enforce these layouts. Diagnostics use protocol 1; render sessions use protocol 2; input sessions use protocol 8. Field order, widths, exported names and calling conventions are compatibility boundaries.
+Requests include their exact byte size and protocol version. `ProbeRequest` is 2064 bytes, `SessionRequest` is 2136, and `InputSessionRequest` is 2224. Static assertions enforce these layouts. Diagnostics use protocol 1; render sessions use protocol 4; input sessions use protocol 9. Field order, widths, exported names and calling conventions are compatibility boundaries.
 
 Zero-initialize requests, then populate required fields. Diagnostic duration is capped at 30,000 ms. Diagnostics require an absolute, null-terminated UTF-16 log path within the 1024-character buffer. Sessions also accept an empty path to disable logging (`--no-log`); `logging` reports the requested session setting. The loader creates a unique path and refuses overwriting an existing log.
 
 Session calls update their request buffer in place with state, enabled/fault flags and counters. Input calls require valid `aim_speed_percent` (10..300) and `aim_smoothing_ms` (0..250) even for status. `stick_speed_percent` must be zero on input and reports the active value on return. `height_calibrated`, `height_m` and `height_offset_m` must also be zero on input; they report the process's calibration and signed offset in meters. The input DLL validates the size/version header before copying the full request, rejecting older versions and incorrect sizes. Input start consumes `legacy_axis0`, `pointing` and `snap_steps`; 0/1/2/4 snap steps mean off/22.5/45/90 degrees. `smooth_turn_speed` at offset 2204 uses former tail padding: zero disables smooth turning, otherwise 30..180 degrees/second with `snap_steps` zero. The version changed despite the unchanged byte size.
+
+Protocol 9 appends `disable_puzzle_reposition` at offset 2208 (0/1 start option,
+zero preserves native positioning) and `puzzle_repositions_blocked` at offset
+2216 (output counter, zero on requests). Older sizes/versions are rejected before
+copying the request. The launcher persists `PuzzleRepositioning=1` by default;
+changing it restarts only the input session and affects subsequent panel approaches.
+
+Render protocol 3 appends `show_hands` at offset 2104 (0/1 start option and
+status), `hands_fault` at 2108 and `hand_draws` at 2112 (outputs, zero on
+requests). The size/version header is validated before copying the full
+request. Protocol 4 adds `world_occlusion` at 2120 (0/1 start option and status),
+`occlusion_active` at 2124 and `occlusion_draws` at 2128 (outputs, zero on requests).
+The launcher persists `ShowHands=0` by default; changing it restarts only rendering
+and preserves its disabled state. World occlusion is hidden for v0.4.0 after an
+unsuccessful headset test: the launcher ignores the former `HandWorldOcclusion`
+preference, clears it on save, and never requests it. The protocol and developer
+CLI retain the experiment for future investigation. A hand fault hides optional
+geometry without disabling cursor/menu submission repairs.
+
+Hand tracking borrows the existing OpenVR system/compositor. The render thread
+captures one HMD/left/right pose sample at eye zero and reuses it for eye one,
+rejecting stale samples, invalid tracking, lost focus, menus, and changed
+interfaces. Immediately before the native cursor draw, each pending eye gets
+at most one hand pass into its source texture. Native submit then performs its
+usual resolve/copy. Missing completion routes retain the existing fallback and
+disable further optional draws. D3D11.1 context-state swapping isolates the
+hand pipeline; private depth provides hand self-occlusion. Experimental world
+occlusion copies the candidate native scene depth into an owned shader resource,
+then compares native projection depth per fragment. Unsupported world depth
+falls back to ordinary hands. A single GPU
+cache stays pinned across sessions until process exit. This avoids worker-side
+COM destruction on a native single-threaded D3D device; device/target changes
+rebuild resources on their owning render thread. See [tracked hands](tracked-hands.md).
 
 `ProbeRequest.reserved` is a DLL-specific diagnostic selector:
 
@@ -95,10 +130,16 @@ Input math headers do not call the game or Windows. `Hand` represents a role-sel
 - `SnapTurn::update` returns -1, 0 or +1 and requires neutral between turns.
 - `SmoothTurn::update` integrates horizontal stick deflection into a yaw delta in radians; invalid contexts, device changes and gaps over 100 ms require neutral. A separate caller-scoped axis-angle hook removes native VR rounding only in smooth mode, including when menus or puzzles block new input.
 - `TriggerButton::update` returns a held state after release, retaining a hold across puzzle entry and drawing; device, menu and focus changes rearm it.
+- In the native trigger key callback, a gap over 100 ms or a game-thread change resets the latch before use. This includes waits inside the original poll, before publication of the new sample.
 - `BButton::update` returns one allowed press edge after release. Left B toggles pause; right B cancels puzzles or goes back in menus.
 - `MenuStick::update` produces native D-pad pulses only in an open menu, after neutral. Hold repeat starts at 350 ms and repeats every 150 ms. Each event uses a complete native press/release pair on the game input thread.
 
 Time arguments are monotonic milliseconds; smooth turning retains fractional milliseconds from QueryPerformanceCounter. Cursor positions/deltas use native cursor view units; motion/stick speeds use view widths per second. INI values are percentages and are divided by 100 at the caller. Yaw headings use radians. Projection uses the eye origin and hand orientation; it does not implement hand-position parallax.
+
+Pointing-pose failure disarms pointing and recentering independently of manual
+stick ownership. Manual input still requires valid controller state, native
+headset tracking and the normal puzzle/focus/capture gates. Context loss resets
+both routes; pose recovery alone does not take ownership back from the stick.
 
 Session and launcher logs use `src/common/session_log.hpp`: empty paths disable file creation; complete records stop at 2 MiB per file. Disk-write failures and reaching the cap do not stop gameplay. Bounded developer captures explicitly requested with `--log` remain diagnostic output.
 

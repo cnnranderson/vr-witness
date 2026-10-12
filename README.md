@@ -53,11 +53,22 @@ Change values in **Settings**, then select **Save settings**.
 | Turning | Snap 22.5 degrees | Off, snap 22.5/45/90 degrees, smooth |
 | Smooth turn speed | 60 degrees/second | 30-180 degrees/second |
 | Controller type | VR | Gamepad unavailable |
+| Automatic puzzle positioning | On | Allow the game's panel approaches |
+| Show hands | Off | Controller-tracked glove visuals |
 | Debug logging | Off | 2 MiB limit per file |
 
 Cursor speeds update within about one second. Other changes briefly restart
 affected fixes. Settings are stored in `config` beside the launcher.
 VR uses the current Knuckles bindings; other VR controllers need validation.
+
+**Show hands** enables experimental gloves that close while the grip button is
+held and reopen on release. Save to apply changes. Hands have self-occlusion but
+can appear over walls and puzzle panels; world occlusion is unavailable in this
+release. These visuals do not change cursor aiming. See [tracked hands](docs/tracked-hands.md).
+
+Turn **Automatic puzzle positioning** off to suppress panel approaches on
+subsequent entries and linked-panel changes. Some perspective puzzles need their
+intended viewpoint; turn it back on and re-enter if interaction becomes difficult.
 
 Smooth turning scales with stick deflection and only runs while walking.
 Center the stick after leaving a puzzle or menu to resume turning.

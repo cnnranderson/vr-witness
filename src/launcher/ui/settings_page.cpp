@@ -43,6 +43,12 @@ void Window::create_settings_page() {
                       CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS | WS_TABSTOP, Page::settings);
     for (const auto* value : {L"VR", L"Gamepad"})
         SendMessageW(controller, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(value));
+    make(L"BUTTON", L"Automatic puzzle positioning", ControlId::puzzle_reposition,
+         BS_AUTOCHECKBOX | WS_TABSTOP, Page::settings);
+    label(L"Turn off to stay in place when entering a panel; some viewpoints may need it.",
+          ControlId::puzzle_reposition_help, Page::settings);
+    make(L"BUTTON", L"Show hands", ControlId::show_hands, BS_AUTOCHECKBOX | WS_TABSTOP, Page::settings);
+    label(L"Experimental controller-tracked gloves.", ControlId::hands_help, Page::settings);
     logging =
         make(L"BUTTON", L"Debug logging", ControlId::logging, BS_AUTOCHECKBOX | WS_TABSTOP, Page::settings);
     label(L"Off by default; logs are limited to 2 MiB each.", ControlId::logging_help, Page::settings);
@@ -73,11 +79,15 @@ void Window::layout_settings_page(int width) {
     place(turn_speed_value, width - 104, 298, 80, 26);
     place(control(ControlId::controller_label), 32, 332, 168, 26);
     place(controller, 204, 326, 230, 160);
-    place(logging, 32, 370, 160, 26);
-    place(control(ControlId::logging_help), 204, 372, width - 228, 26);
-    place(control(ControlId::save), 32, 412, 148, 32);
-    place(control(ControlId::defaults), 192, 412, 142, 32);
-    place(control(ControlId::settings_help), 32, 456, width - 64, 36);
+    place(control(ControlId::puzzle_reposition), 32, 370, 330, 26);
+    place(control(ControlId::puzzle_reposition_help), 32, 400, width - 64, 26);
+    place(control(ControlId::show_hands), 32, 430, 160, 26);
+    place(control(ControlId::hands_help), 204, 432, width - 228, 26);
+    place(logging, 32, 466, 160, 26);
+    place(control(ControlId::logging_help), 204, 468, width - 228, 26);
+    place(control(ControlId::save), 32, 508, 148, 32);
+    place(control(ControlId::defaults), 192, 508, 142, 32);
+    place(control(ControlId::settings_help), 32, 552, width - 64, 36);
 }
 
 void Window::fill_settings(const Settings& settings) {
@@ -93,6 +103,10 @@ void Window::fill_settings(const Settings& settings) {
     SendMessageW(turn_speed, TBM_SETPOS, TRUE, settings.smooth_turn_speed);
     SendMessageW(controller, CB_SETCURSEL, 0, 0);
     SendMessageW(logging, BM_SETCHECK, settings.logging ? BST_CHECKED : BST_UNCHECKED, 0);
+    SendMessageW(control(ControlId::puzzle_reposition), BM_SETCHECK,
+                 settings.puzzle_repositioning ? BST_CHECKED : BST_UNCHECKED, 0);
+    SendMessageW(control(ControlId::show_hands), BM_SETCHECK,
+                 settings.show_hands ? BST_CHECKED : BST_UNCHECKED, 0);
     update_values();
 }
 
@@ -107,6 +121,9 @@ Settings Window::settings() const {
     settings.smooth_turn_speed = static_cast<int>(SendMessageW(turn_speed, TBM_GETPOS, 0, 0));
     settings.controller = ControllerType::vr;
     settings.logging = SendMessageW(logging, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    settings.puzzle_repositioning =
+        SendMessageW(control(ControlId::puzzle_reposition), BM_GETCHECK, 0, 0) == BST_CHECKED;
+    settings.show_hands = SendMessageW(control(ControlId::show_hands), BM_GETCHECK, 0, 0) == BST_CHECKED;
     return settings;
 }
 

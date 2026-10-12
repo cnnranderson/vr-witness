@@ -87,13 +87,26 @@ void check_settings_round_trip(const fs::path& root) {
     Settings settings;
     require(load_settings(root) == settings, "default settings");
     require(settings.snap_steps == 1 && !settings.smooth_turn, "22.5-degree snap is the default");
+    require(settings.puzzle_repositioning, "native puzzle positioning is enabled by default");
+    require(!settings.show_hands, "experimental hands are disabled by default");
+    auto hands_only = settings;
+    hands_only.show_hands = true;
+    require(!(hands_only == settings), "hand preference participates in settings equality");
     settings.stick_speed = 22;
     settings.motion_speed = 110;
     settings.smoothing_ms = 120;
     settings.snap_steps = 1;
     settings.logging = true;
+    settings.puzzle_repositioning = false;
+    settings.show_hands = true;
     save_settings(root, settings);
     require(load_settings(root) == settings, "settings round trip");
+    require(!load_settings(root).puzzle_repositioning, "disabled puzzle positioning persists");
+    require(load_settings(root).show_hands, "enabled hands persist");
+    require(WritePrivateProfileStringW(L"Input", L"HandWorldOcclusion", L"1",
+                                       (root / L"config/input.ini").c_str()) &&
+                load_settings(root) == settings,
+            "retired preview occlusion preference is ignored");
     require(WritePrivateProfileStringW(L"Input", L"ControllerType", L"Knuckles",
                                        (root / L"config/input.ini").c_str()) &&
                 load_settings(root) == settings,
@@ -103,6 +116,9 @@ void check_settings_round_trip(const fs::path& root) {
     settings.smooth_turn_speed = 90;
     save_settings(root, settings);
     require(load_settings(root) == settings, "smooth turning settings round trip");
+    require(GetPrivateProfileIntW(L"Input", L"HandWorldOcclusion", 1, (root / L"config/input.ini").c_str()) ==
+                0,
+            "saving settings disables the retired preview occlusion preference");
     auto bad_turn = settings;
     bad_turn.snap_steps = 1;
     require(!valid_settings(bad_turn), "snap and smooth cannot both be enabled");
@@ -121,6 +137,20 @@ void check_settings_round_trip(const fs::path& root) {
         rejected = true;
     }
     require(rejected && load_settings(root) == settings, "invalid settings preserve saved file");
+    for (const auto* value : {L"", L"bad", L"2"}) {
+        require(WritePrivateProfileStringW(L"Input", L"PuzzleRepositioning", value,
+                                           (root / L"config/input.ini").c_str()) &&
+                    load_settings(root).puzzle_repositioning,
+                "only explicit zero suppresses puzzle positioning");
+        require(
+            WritePrivateProfileStringW(L"Input", L"ShowHands", value, (root / L"config/input.ini").c_str()) &&
+                !load_settings(root).show_hands,
+            "missing or invalid hand preferences remain disabled");
+    }
+    settings.puzzle_repositioning = true;
+    settings.show_hands = false;
+    save_settings(root, settings);
+    require(load_settings(root) == settings, "native puzzle positioning can be restored");
 }
 
 void check_session_status_parsing() {
@@ -130,6 +160,11 @@ void check_session_status_parsing() {
     require(parsed.loaded && parsed.enabled && !parsed.fault && parsed.snap_steps == 1 && parsed.logging,
             "input status parse including 22.5");
     require(parsed.smooth_turn_speed == 0, "snap status leaves smooth turning disabled");
+    require(parsed.puzzle_repositioning, "missing legacy status preserves native positioning");
+    const auto positioning_status = parse_session(
+        R"({"state":"running","loaded":true,"enabled":true,"fault":false,"puzzle_repositioning":false,"height_calibrated":false,"height_m":0,"height_offset_m":0})",
+        SessionKind::input);
+    require(!positioning_status.puzzle_repositioning, "disabled puzzle positioning status");
     const auto smooth_status = parse_session(
         R"({"state":"running","loaded":true,"enabled":true,"fault":false,"snap_angle":0,"smooth_turn_speed":90,"height_calibrated":false,"height_m":0,"height_offset_m":0})",
         SessionKind::input);
@@ -160,6 +195,35 @@ void check_session_status_parsing() {
         parse_session(R"({"state":"running","loaded":true,"enabled":false,"fault":false,"logging":false})",
                       SessionKind::render);
     require(!parsed.enabled && !parsed.logging, "disabled status and logging");
+    require(!parsed.show_hands && !parsed.hands_fault && !parsed.hand_draws,
+            "absent hand status stays disabled");
+    require(!parsed.world_occlusion && !parsed.occlusion_active && !parsed.occlusion_draws,
+            "absent occlusion status stays disabled");
+    parsed = parse_session(
+        R"({"state":"running","loaded":true,"enabled":true,"fault":false,"show_hands":true,"hands_fault":true,"hand_draws":4294967297})",
+        SessionKind::render);
+    require(parsed.show_hands && parsed.hands_fault && parsed.hand_draws == 4294967297ULL && parsed.active(),
+            "hand failure and 64-bit counters do not disable the VR fixes");
+    parsed = parse_session(
+        R"({"state":"running","loaded":true,"enabled":true,"fault":false,"show_hands":true,"hands_fault":false,"hand_draws":4294967298,"world_occlusion":true,"occlusion_active":true,"occlusion_draws":4294967297})",
+        SessionKind::render);
+    require(parsed.world_occlusion && parsed.occlusion_active && parsed.occlusion_draws == 4294967297ULL,
+            "occlusion preference, active state, and 64-bit counter parse independently");
+    for (const auto& fields :
+         {R"("show_hands":2)", R"("hands_fault":"yes")", R"("hand_draws":-1)", R"("hand_draws":1.5)",
+          R"("hand_draws":18446744073709551616)", R"("world_occlusion":2)", R"("occlusion_active":"yes")",
+          R"("occlusion_draws":-1)", R"("occlusion_draws":1.5)",
+          R"("occlusion_draws":18446744073709551616)"}) {
+        bool invalid = false;
+        try {
+            parse_session(std::string(R"({"state":"running","loaded":true,"enabled":true,"fault":false,)") +
+                              fields + "}",
+                          SessionKind::render);
+        } catch (...) {
+            invalid = true;
+        }
+        require(invalid, "invalid hand status rejected");
+    }
     bool rejected = false;
     try {
         parse_session("{}", SessionKind::render);

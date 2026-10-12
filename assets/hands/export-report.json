@@ -1,0 +1,25 @@
+{
+	"engine": "4.7.1-stable (official)",
+	"hands": [
+		{
+			"binds": 26,
+			"bones": 26,
+			"glb_sha256": "7064affaea4dd8e1bb2e41cdf13c62f3606b1215a7486ba0159bb3157995d872",
+			"round_trip_validated": true,
+			"side": "left",
+			"source_sha256": "25ca2d54e4b9fe8ff8c40a73e1b21a0d699f80ac51375ef3c3f85a9b9873bdbe",
+			"triangles": 456,
+			"vertices": 1368
+		},
+		{
+			"binds": 26,
+			"bones": 26,
+			"glb_sha256": "7c6cb5b8fdff635b6c804c7925dae60de6483d67712b4bf6d4455d96173710a2",
+			"round_trip_validated": true,
+			"side": "right",
+			"source_sha256": "52b3718b84a07eb1c3eeb520de3dd773e8e526bb1b76453269d0bd35bab336ba",
+			"triangles": 456,
+			"vertices": 1368
+		}
+	]
+}

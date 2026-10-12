@@ -5,3 +5,9 @@ MinGW-w64 and winpthreads: see MinGW-w64-runtime.txt.
 GCC libgcc/libstdc++ runtime: see GCC-COPYING3.txt and GCC-COPYING.RUNTIME.txt.
 The w64devkit support routines are released into the public domain.
 No compiler or third-party installer is included.
+
+The embedded left/right glove meshes derive from Glove by Quaternius.
+Source: https://poly.pizza/m/l1zv4LaA4I
+License: Public Domain (CC0 1.0).
+https://creativecommons.org/publicdomain/zero/1.0/
+The supplied Godot meshes and rigs were converted for native rendering and grip animation.
